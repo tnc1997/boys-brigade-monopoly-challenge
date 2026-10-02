@@ -20,6 +20,7 @@
           <p class="text-sm text-white/80">Boys' Brigade · Bristol</p>
         </div>
         <p class="shrink-0 text-right">
+          <span id="offline-badge" class="mb-1 hidden rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold" role="status">Offline</span>
           <span id="countdown" class="block text-base font-semibold tabular-nums"></span>
           <span id="countdown-deadline" class="block text-xs text-white/80"></span>
         </p>
@@ -126,6 +127,7 @@
         <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" class="mt-3" hidden>
           <div id="map" role="region" aria-label="Map of the route" class="h-[60dvh] min-h-80 overflow-hidden rounded-md ring-1 ring-line"></div>
           <p id="map-status" class="mt-2 hidden text-sm text-muted" role="status"></p>
+          <p id="map-tiles-status" class="mt-2 hidden text-sm text-muted" role="status">Some map tiles couldn't load without signal. Your route is still shown, and the List tab works offline.</p>
         </div>
       </section>
     </main>

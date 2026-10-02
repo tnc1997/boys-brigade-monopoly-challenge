@@ -52,15 +52,21 @@ const MARKER_CLASSES = {
  * Leaflet is loaded from a CDN as the global `L`.
  *
  * @param {HTMLElement} container The element to show the map in. It must be visible and have a height.
+ * @param {object} [options] Callbacks.
+ * @param {() => void} [options.onTilesFailed] Called when map tiles fail to load, for example without signal.
+ * @param {() => void} [options.onTilesLoaded] Called when map tiles load again.
  * @returns {RouteMap | null} The map, or `null` if Leaflet couldn't be loaded (for example, without signal).
  */
-export function createMap(container) {
+export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded = () => {} } = {}) {
   const { L } = globalThis;
   if (!L) {
     return null;
   }
   const map = L.map(container);
-  L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
+  L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION })
+    .on('tileerror', onTilesFailed)
+    .on('tileload', onTilesLoaded)
+    .addTo(map);
   map.fitBounds(BRISTOL_BOUNDS);
   const routeLayer = L.layerGroup().addTo(map);
   // The team's position goes in its own pane above the markers (600), so a
