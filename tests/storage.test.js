@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+
+import { SCHEMA_VERSION, STORAGE_KEY, clearState, defaultState, loadState, saveState } from '../storage.js';
+
+/** An in-memory stand-in for localStorage. */
+const memoryStorage = (initial = {}) => {
+  const items = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => (items.has(key) ? items.get(key) : null),
+    setItem: (key, value) => items.set(key, String(value)),
+    removeItem: (key) => items.delete(key),
+    items,
+  };
+};
+
+/** A storage that throws on every call, like a blocked or full localStorage. */
+const throwingStorage = {
+  getItem: () => {
+    throw new Error('SecurityError');
+  },
+  setItem: () => {
+    throw new Error('QuotaExceededError');
+  },
+  removeItem: () => {
+    throw new Error('SecurityError');
+  },
+};
+
+describe('storage', () => {
+  test('loads the defaults when nothing is saved', () => {
+    assert.deepEqual(loadState(memoryStorage()), defaultState());
+  });
+
+  test('saves and loads the state', () => {
+    const storage = memoryStorage();
+    const state = defaultState();
+    state.settings.speedKmh = 3.5;
+    state.setup.locationsText = 'Old Kent Road 51.4545,-2.5879';
+    state.doneKeys = ['51.4545,-2.5879'];
+    state.plan = { order: [0], arrivalTimes: [1], endEta: 2, spareSeconds: 3, skipped: [] };
+    assert.equal(saveState(state, storage), true);
+    assert.deepEqual(loadState(storage), state);
+  });
+
+  test('saves under a single versioned key', () => {
+    const storage = memoryStorage();
+    saveState(defaultState(), storage);
+    assert.deepEqual([...storage.items.keys()], [STORAGE_KEY]);
+    assert.equal(JSON.parse(storage.items.get(STORAGE_KEY)).version, SCHEMA_VERSION);
+  });
+
+  test('falls back to the defaults for an older or unknown version', () => {
+    for (const version of [0, SCHEMA_VERSION + 1, 'one', undefined]) {
+      const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ ...defaultState(), version, doneKeys: ['x'] }) });
+      assert.deepEqual(loadState(storage), defaultState());
+    }
+  });
+
+  test('falls back to the defaults for unreadable data', () => {
+    for (const text of ['not json', '[]', 'null', '42']) {
+      assert.deepEqual(loadState(memoryStorage({ [STORAGE_KEY]: text })), defaultState());
+    }
+  });
+
+  test('fills in missing or invalid fields with the defaults', () => {
+    const storage = memoryStorage({
+      [STORAGE_KEY]: JSON.stringify({ version: SCHEMA_VERSION, settings: { speedKmh: 5.5 }, doneKeys: ['a', 1, null], plan: 'nope' }),
+    });
+    const state = loadState(storage);
+    const defaults = defaultState();
+    assert.deepEqual(state.settings, { ...defaults.settings, speedKmh: 5.5 });
+    assert.deepEqual(state.setup, defaults.setup);
+    assert.deepEqual(state.doneKeys, ['a']);
+    assert.equal(state.plan, null);
+  });
+
+  test('keeps working when storage throws', () => {
+    assert.deepEqual(loadState(throwingStorage), defaultState());
+    assert.equal(saveState(defaultState(), throwingStorage), false);
+    assert.equal(clearState(throwingStorage), false);
+  });
+
+  test('keeps working when storage is unavailable', () => {
+    assert.deepEqual(loadState(null), defaultState());
+    assert.equal(saveState(defaultState(), null), false);
+    assert.equal(clearState(null), false);
+  });
+
+  test('clears the saved state', () => {
+    const storage = memoryStorage();
+    saveState(defaultState(), storage);
+    assert.equal(clearState(storage), true);
+    assert.equal(storage.items.size, 0);
+  });
+
+  test('returns a fresh default state each time', () => {
+    const state = defaultState();
+    state.doneKeys.push('x');
+    assert.deepEqual(defaultState().doneKeys, []);
+  });
+});
