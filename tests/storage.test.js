@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { SCHEMA_VERSION, STORAGE_KEY, clearState, defaultState, loadState, saveState } from '../storage.js';
+import { SCHEMA_VERSION, STORAGE_KEY, clearState, defaultState, loadState, resetChallenge, saveState } from '../storage.js';
 
 /** An in-memory stand-in for localStorage. */
 const memoryStorage = (initial = {}) => {
@@ -106,5 +106,32 @@ describe('storage', () => {
     const state = defaultState();
     state.doneKeys.push('x');
     assert.deepEqual(defaultState().doneKeys, []);
+  });
+});
+
+describe('resetChallenge', () => {
+  test('clears the locations, ticks and plan, keeping everything else', () => {
+    const state = defaultState();
+    state.settings.speedKmh = 3.5;
+    state.setup = { locationsText: 'Old Kent Road 51.4545,-2.5879', startText: 'Castle Park 51.4556,-2.5894', finishText: 'Finish 51.4556,-2.5894', startTimeText: '11:00' };
+    state.doneKeys = ['51.454500,-2.587900'];
+    state.view = 'map';
+    state.searchResults = { 'queen square': { isFound: false, error: 'No match', isTemporary: false } };
+    state.plan = { order: [0] };
+    const reset = resetChallenge(state);
+    assert.equal(reset.setup.locationsText, '');
+    assert.deepEqual(reset.doneKeys, []);
+    assert.equal(reset.plan, null);
+    assert.deepEqual(reset.settings, state.settings);
+    assert.deepEqual({ ...reset.setup, locationsText: 'x' }, { ...state.setup, locationsText: 'x' });
+    assert.equal(reset.view, 'map');
+    assert.deepEqual(reset.searchResults, state.searchResults);
+  });
+
+  test("doesn't change the original state", () => {
+    const state = defaultState();
+    state.setup.locationsText = 'Old Kent Road 51.4545,-2.5879';
+    resetChallenge(state);
+    assert.equal(state.setup.locationsText, 'Old Kent Road 51.4545,-2.5879');
   });
 });

@@ -159,3 +159,20 @@ export function clearState(storage = browserStorage()) {
     return false;
   }
 }
+
+/**
+ * Starts a new challenge: clears the location list, the ticks and the plan,
+ * but keeps the settings, the start, finish and start time, the chosen tab
+ * and saved search results (which can be reused).
+ *
+ * @param {AppState} state The current state. This isn't changed.
+ * @returns {AppState} The state for a new challenge.
+ */
+export function resetChallenge(state) {
+  return {
+    ...state,
+    setup: { ...state.setup, locationsText: '' },
+    doneKeys: [],
+    plan: null,
+  };
+}
