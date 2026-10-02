@@ -84,7 +84,7 @@ export function parseGoogleMapsLink(link) {
   if (/^(?:maps\.app\.goo\.gl|goo\.gl)$/i.test(url.hostname)) {
     return {
       isValid: false,
-      error: 'Short Google Maps links can\'t be read without opening them. Open the link, then paste the full link from the address bar or the coordinates instead.',
+      error: 'Short Google Maps links can\'t be read without opening them. In Google Maps, drop a pin on the location and paste the coordinates it shows instead.',
     };
   }
 
