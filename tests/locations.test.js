@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { parseLocation, parseLocations } from '../locations.js';
+import { parseGoogleMapsLink, parseLocation, parseLocations } from '../locations.js';
 
 describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
@@ -46,6 +46,14 @@ describe('parseLocation', () => {
 
   test('keeps numbers and punctuation inside the label', () => {
     assert.equal(parseLocation('Platform 9¾, King’s Cross 51.4545,-2.5879').location.label, 'Platform 9¾, King’s Cross');
+  });
+
+  test('accepts a what3words address next to separators', () => {
+    for (const line of ['///filled.count.soap, Old Kent Road, 51.4545,-2.5879', 'Old Kent Road;///filled.count.soap|51.4545,-2.5879']) {
+      const { location } = parseLocation(line);
+      assert.equal(location.words, 'filled.count.soap', line);
+      assert.equal(location.label, 'Old Kent Road', line);
+    }
   });
 
   test('accepts what3words links', () => {
@@ -115,5 +123,95 @@ describe('parseLocations', () => {
 
   test('returns nothing for an empty list', () => {
     assert.deepEqual(parseLocations(''), []);
+  });
+});
+
+describe('parseGoogleMapsLink', () => {
+  const assertCoordinates = (link, lat, lng, placeName = null) => {
+    assert.deepEqual(parseGoogleMapsLink(link), { isValid: true, coordinates: { lat, lng }, placeName }, link);
+  };
+
+  test('reads ?q=lat,lng links', () => {
+    assertCoordinates('https://www.google.com/maps?q=51.4545,-2.5879', '51.4545', '-2.5879');
+    assertCoordinates('https://maps.google.com/?q=51.4545%2C-2.5879', '51.4545', '-2.5879');
+    assertCoordinates('https://www.google.co.uk/maps?q=51.4545,+-2.5879', '51.4545', '-2.5879');
+  });
+
+  test('reads ?query=lat,lng and ?destination=lat,lng links', () => {
+    assertCoordinates('https://www.google.com/maps/search/?api=1&query=51.4545,-2.5879', '51.4545', '-2.5879');
+    assertCoordinates('https://www.google.com/maps/dir/?api=1&destination=51.4545,-2.5879', '51.4545', '-2.5879');
+  });
+
+  test('reads @lat,lng links', () => {
+    assertCoordinates('https://www.google.com/maps/@51.4545,-2.5879,17z', '51.4545', '-2.5879');
+  });
+
+  test("prefers the pin's position over the centre of the map, and reads the place's name", () => {
+    assertCoordinates(
+      'https://www.google.com/maps/place/Castle+Park/@51.4560,-2.5900,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d51.4556!4d-2.5894!16s',
+      '51.4556',
+      '-2.5894',
+      'Castle Park',
+    );
+  });
+
+  test('reads links without https://', () => {
+    assertCoordinates('google.com/maps?q=51.4545,-2.5879', '51.4545', '-2.5879');
+    assertCoordinates('maps.google.com/?q=51.4545,-2.5879', '51.4545', '-2.5879');
+  });
+
+  test('rejects short links', () => {
+    for (const link of ['https://maps.app.goo.gl/abc123', 'https://goo.gl/maps/abc123', 'maps.app.goo.gl/abc123']) {
+      const result = parseGoogleMapsLink(link);
+      assert.equal(result.isValid, false, link);
+      assert.match(result.error, /Short Google Maps links/);
+    }
+  });
+
+  test('rejects links without coordinates', () => {
+    for (const link of ['https://www.google.com/maps/search/?api=1&query=Castle+Park', 'https://www.google.com/maps?q=Castle+Park', 'https://www.google.com/maps']) {
+      const result = parseGoogleMapsLink(link);
+      assert.equal(result.isValid, false, link);
+      assert.match(result.error, /doesn't include coordinates/);
+    }
+  });
+});
+
+describe('parseLocation with Google Maps links', () => {
+  test('uses the coordinates from the link', () => {
+    const { location } = parseLocation('https://www.google.com/maps?q=51.4545,-2.5879');
+    assert.deepEqual(location, { lat: 51.4545, lng: -2.5879, label: '51.4545, -2.5879', words: null, key: '51.454500,-2.587900' });
+  });
+
+  test('works with a label and what3words address on the same line', () => {
+    for (const line of [
+      'Old Kent Road ///filled.count.soap https://www.google.com/maps?q=51.4545,-2.5879',
+      'https://www.google.com/maps?q=51.4545,-2.5879 Old Kent Road ///filled.count.soap',
+      '///filled.count.soap, Old Kent Road, maps.google.com/?q=51.4545,-2.5879',
+    ]) {
+      assert.deepEqual(parseLocation(line).location, { lat: 51.4545, lng: -2.5879, label: 'Old Kent Road', words: 'filled.count.soap', key: '51.454500,-2.587900' }, line);
+    }
+  });
+
+  test("labels a location with the place's name when there is no label", () => {
+    const link = 'https://www.google.com/maps/place/Castle+Park/@51.4560,-2.5900,17z/data=!3d51.4556!4d-2.5894';
+    assert.equal(parseLocation(link).location.label, 'Castle Park');
+    assert.equal(parseLocation(`Start ${link}`).location.label, 'Start');
+  });
+
+  test('does not mistake the link for a what3words address', () => {
+    assert.equal(parseLocation('maps.google.com/?q=51.4545,-2.5879').location.words, null);
+  });
+
+  test('rejects a short link with a message', () => {
+    const result = parseLocation('Old Kent Road https://maps.app.goo.gl/abc123');
+    assert.equal(result.isValid, false);
+    assert.match(result.error, /Short Google Maps links/);
+  });
+
+  test('rejects a link and coordinates on the same line', () => {
+    const result = parseLocation('https://www.google.com/maps?q=51.4545,-2.5879 51.4600,-2.6000');
+    assert.equal(result.isValid, false);
+    assert.match(result.error, /more than one set of coordinates/);
   });
 });
