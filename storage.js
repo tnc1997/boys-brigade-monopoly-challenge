@@ -16,6 +16,7 @@
  * @property {string} locationsText The location list, one location per line.
  * @property {string} startText Where the route starts.
  * @property {string} finishText Where the route finishes, or an empty string if there's no physical finish.
+ * @property {string} startTimeText When the route starts, as `HH:MM` local time, or an empty string to start when Plan route is pressed.
  */
 
 /**
@@ -26,7 +27,7 @@
  * @property {Settings} settings Settings for planning.
  * @property {Setup} setup What was entered in the setup form.
  * @property {string[]} doneKeys Keys of the locations whose selfie has been taken.
- * @property {import('./planner.js').Plan | null} plan The current plan, or `null` if there isn't one yet.
+ * @property {import('./setup.js').SavedPlan | null} plan The current plan, or `null` if there isn't one yet.
  */
 
 /**
@@ -60,6 +61,7 @@ export function defaultState() {
       locationsText: '',
       startText: 'Castle Park 51.4556,-2.5894',
       finishText: '',
+      startTimeText: '',
     },
     doneKeys: [],
     plan: null,
