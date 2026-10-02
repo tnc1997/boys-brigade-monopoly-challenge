@@ -1,6 +1,7 @@
 import { describeRoute, formatDuration, progress, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
+import { createMap } from './map.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -20,6 +21,11 @@ const locationMatches = /** @type {HTMLDivElement} */ (document.getElementById('
 const locationMatchesList = /** @type {HTMLUListElement} */ (document.getElementById('location-matches-list'));
 const planButton = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
 const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('[role="tab"][data-view]')]);
+const mapContainer = /** @type {HTMLDivElement} */ (document.getElementById('map'));
+const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-status'));
+
+/** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
+let routeMap = null;
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -413,10 +419,24 @@ function showView(view, shouldFocus = false) {
       tab.focus();
     }
   }
+  if (view === 'map') {
+    showMap();
+  }
   if (state.view !== view) {
     state.view = view;
     saveState(state);
   }
+}
+
+/** Creates the map the first time it's shown, and resizes it to fit afterwards. */
+function showMap() {
+  if (routeMap) {
+    routeMap.refresh();
+    return;
+  }
+  routeMap = createMap(mapContainer);
+  mapStatus.classList.toggle('hidden', routeMap !== null);
+  mapStatus.textContent = routeMap ? '' : "The map couldn't load, which usually means there's no signal. The List tab still works.";
 }
 
 for (const tab of tabs) {
