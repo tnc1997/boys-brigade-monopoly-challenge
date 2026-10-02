@@ -143,7 +143,10 @@ export function evaluateRoute({
  * `points` are the candidate locations in any order, rather than `stops` in
  * visiting order.
  *
- * @typedef {Omit<RouteOptions, 'stops'> & { points: LatLng[] }} PlanOptions
+ * `timeLimitMs` limits how long {@link plan} spends improving the route,
+ * in milliseconds (200 by default).
+ *
+ * @typedef {Omit<RouteOptions, 'stops'> & { points: LatLng[], timeLimitMs?: number }} PlanOptions
  */
 
 /**
@@ -260,13 +263,16 @@ function routeSeconds(route, { walk, startNode, finishNode, dwellSeconds }) {
  *
  * @param {number[]} route Point nodes already in the route, in visiting order. This isn't changed.
  * @param {RouteContext} context The walking times and limits.
+ * @param {Set<number>} [excluded] Point nodes not to add.
  * @returns {number[]} The route with the points that fit added.
  */
-function insertGreedily(route, context) {
+function insertGreedily(route, context, excluded = new Set()) {
   const { walk, startNode, finishNode, pointCount, dwellSeconds, budgetSeconds } = context;
   const result = [...route];
   let seconds = routeSeconds(result, context);
-  const unvisited = new Set(Array.from({ length: pointCount }, (_, index) => index + 1).filter((node) => !result.includes(node)));
+  const unvisited = new Set(
+    Array.from({ length: pointCount }, (_, index) => index + 1).filter((node) => !result.includes(node) && !excluded.has(node)),
+  );
 
   while (unvisited.size > 0) {
     let best = null;
@@ -330,6 +336,43 @@ function twoOpt(route, { walk, startNode, finishNode }) {
 }
 
 /**
+ * Whether one route is better than another: it visits more points, or the
+ * same number in less time.
+ *
+ * @param {number[]} candidate Point nodes in visiting order.
+ * @param {number[]} current Point nodes in visiting order.
+ * @param {RouteContext} context The walking times and limits.
+ * @returns {boolean} Whether `candidate` is better than `current`.
+ */
+function isBetterRoute(candidate, current, context) {
+  if (candidate.length !== current.length) {
+    return candidate.length > current.length;
+  }
+  return routeSeconds(candidate, context) < routeSeconds(current, context) - IMPROVEMENT_SECONDS;
+}
+
+/**
+ * Tries removing each stop in turn and greedily inserting other points into
+ * the time that frees up, which can fit two nearby points in place of one
+ * out-of-the-way one. The removed stop isn't put back in the same attempt.
+ *
+ * @param {number[]} route Point nodes in visiting order. This isn't changed.
+ * @param {RouteContext} context The walking times and limits.
+ * @param {number} stopAt When to give up, from `performance.now()`.
+ * @returns {number[] | null} The first better route found, or `null` if there isn't one.
+ */
+function swapOneForMore(route, context, stopAt) {
+  for (let position = 0; position < route.length && performance.now() < stopAt; position += 1) {
+    const without = route.filter((_, index) => index !== position);
+    const candidate = insertGreedily(twoOpt(without, context), context, new Set([route[position]]));
+    if (isBetterRoute(candidate, route, context)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
  * A planned route.
  *
  * @typedef {object} Plan
@@ -342,7 +385,9 @@ function twoOpt(route, { walk, startNode, finishNode }) {
 
 /**
  * Plans the route that visits as many points as possible before the deadline
- * minus the safety margin, ending at the finish if there is one.
+ * minus the safety margin, ending at the finish if there is one. It builds a
+ * route by greedy insertion, then improves it with 2-opt and by swapping one
+ * stop for others, for up to `timeLimitMs`.
  *
  * @param {PlanOptions} options The candidate points and the settings to plan with.
  * @returns {Plan} The visiting order, the timings and the points left out.
@@ -358,17 +403,24 @@ function twoOpt(route, { walk, startNode, finishNode }) {
  * order; // [1, 0]
  * skipped; // []
  */
-export function plan(options) {
-  // Build a route greedily, then shorten it with 2-opt and use any time that
-  // frees up for more points, until neither changes the route.
+export function plan({ timeLimitMs = 200, ...options }) {
+  // Build a route greedily, then improve it until nothing helps or the time
+  // limit is reached: shorten it with 2-opt and use any time that frees up
+  // for more points, then try swapping one stop for others.
   const context = routeContext(options);
+  const stopAt = performance.now() + timeLimitMs;
   let route = insertGreedily([], context);
-  for (;;) {
+  while (performance.now() < stopAt) {
     const improved = insertGreedily(twoOpt(route, context), context);
-    if (improved.length === route.length && routeSeconds(improved, context) >= routeSeconds(route, context) - IMPROVEMENT_SECONDS) {
+    if (isBetterRoute(improved, route, context)) {
+      route = improved;
+      continue;
+    }
+    const swapped = swapOneForMore(route, context, stopAt);
+    if (!swapped) {
       break;
     }
-    route = improved;
+    route = swapped;
   }
   const order = toIndexes(route);
   const { arrivalTimes, endEta, spareSeconds } = evaluateRoute({
