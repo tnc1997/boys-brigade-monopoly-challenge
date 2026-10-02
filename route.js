@@ -88,3 +88,31 @@ export function describeRoute(plan) {
     skipped: plan.skipped.map((index) => plan.points[index]),
   };
 }
+
+/**
+ * Marks a location's selfie as done, or as not done if it already was.
+ *
+ * @param {string[]} doneKeys Keys of the locations whose selfie has been taken.
+ * @param {string} key The key of the location to toggle.
+ * @returns {string[]} The new list of keys. The original isn't changed.
+ * @example
+ * toggleDone(['a'], 'b'); // ['a', 'b']
+ * toggleDone(['a', 'b'], 'a'); // ['b']
+ */
+export function toggleDone(doneKeys, key) {
+  return doneKeys.includes(key) ? doneKeys.filter((doneKey) => doneKey !== key) : [...doneKeys, key];
+}
+
+/**
+ * Counts how many of a plan's locations have had their selfie taken.
+ * Keys of locations that aren't in the plan (for example from an earlier
+ * list) aren't counted.
+ *
+ * @param {import('./setup.js').SavedPlan} plan The plan.
+ * @param {string[]} doneKeys Keys of the locations whose selfie has been taken.
+ * @returns {{ done: number, total: number }} The number of locations done, and the number in the list.
+ */
+export function progress(plan, doneKeys) {
+  const done = new Set(doneKeys);
+  return { done: plan.points.filter(({ key }) => done.has(key)).length, total: plan.points.length };
+}

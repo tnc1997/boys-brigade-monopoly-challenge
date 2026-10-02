@@ -1,4 +1,4 @@
-import { describeRoute, formatDuration } from './route.js';
+import { describeRoute, formatDuration, progress, toggleDone } from './route.js';
 import { planFromSetup } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -122,11 +122,13 @@ function externalLink(href, text, label = text) {
  * @returns {HTMLLIElement} The list item.
  */
 function stopItem(stop, isFinish) {
-  const item = element('li', 'flex gap-3 rounded-md p-3 ring-1 ring-slate-200');
+  const isDone = !isFinish && state.doneKeys.includes(stop.location.key);
+  const item = element('li', `flex gap-3 rounded-md p-3 ring-1 ${isDone ? 'bg-emerald-50 ring-emerald-200' : 'ring-slate-200'}`);
+  const badgeColours = isFinish ? 'bg-slate-800 text-white' : isDone ? 'bg-emerald-200 text-emerald-900' : 'bg-emerald-700 text-white';
   const badge = element(
     'span',
-    `flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${isFinish ? 'bg-slate-800 text-white' : 'bg-emerald-700 text-white'}`,
-    isFinish ? '🏁' : String(stop.number),
+    `flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${badgeColours}`,
+    isFinish ? '🏁' : isDone ? '✓' : String(stop.number),
   );
   badge.setAttribute('aria-hidden', 'true');
 
@@ -138,6 +140,18 @@ function stopItem(stop, isFinish) {
     `${isFinish ? 'Finish · arrive' : 'ETA'} ${timeFormat.format(stop.arrivalTime)} · ${formatDuration(stop.walkSeconds)} walk`,
   );
   const links = element('div', 'mt-1 flex flex-wrap gap-2');
+  if (!isFinish) {
+    const toggle = element(
+      'button',
+      `inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold ${isDone ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-white text-emerald-800 ring-1 ring-emerald-700 hover:bg-emerald-50'}`,
+      isDone ? '✓ Selfie done' : 'Mark selfie done',
+    );
+    toggle.type = 'button';
+    toggle.dataset.doneKey = stop.location.key;
+    toggle.setAttribute('aria-pressed', String(isDone));
+    toggle.setAttribute('aria-label', `Selfie done at ${stop.location.label}`);
+    links.append(toggle);
+  }
   links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
   if (stop.what3wordsUrl) {
     links.append(externalLink(stop.what3wordsUrl, 'what3words', `${stop.location.label} in what3words`));
@@ -158,6 +172,9 @@ function showPlan() {
   const route = describeRoute(plan);
   const ending = route.finish ? `arriving at the finish at ${timeFormat.format(route.endEta)}` : `with the last selfie at ${timeFormat.format(route.endEta)}`;
   const summary = element('p', 'text-sm', `Visiting ${route.stops.length} of ${plan.points.length} locations, ${ending}.`);
+  const { done, total } = progress(plan, state.doneKeys);
+  const counter = element('p', 'mt-1 text-sm font-semibold text-emerald-800', `Selfies done: ${done} of ${total}`);
+  counter.setAttribute('aria-live', 'polite');
 
   const stops = element('ol', 'mt-3 flex flex-col gap-2');
   stops.setAttribute('aria-label', 'Stops in order');
@@ -165,7 +182,7 @@ function showPlan() {
   if (route.finish) {
     stops.append(stopItem(route.finish, true));
   }
-  const sections = [summary, stops];
+  const sections = [summary, counter, stops];
 
   if (route.skipped.length > 0) {
     const heading = element('h3', 'mt-4 text-sm font-semibold', `Skipped (${route.skipped.length}): not enough time`);
@@ -175,6 +192,17 @@ function showPlan() {
   }
   stopList.replaceChildren(...sections);
 }
+
+stopList.addEventListener('click', (event) => {
+  const toggle = event.target instanceof Element ? event.target.closest('[data-done-key]') : null;
+  if (toggle instanceof HTMLButtonElement) {
+    state.doneKeys = toggleDone(state.doneKeys, toggle.dataset.doneKey);
+    saveState(state);
+    showPlan();
+    // Re-rendering replaces the button, so move focus to its replacement.
+    stopList.querySelector(`[data-done-key="${CSS.escape(toggle.dataset.doneKey)}"]`)?.focus();
+  }
+});
 
 form.addEventListener('input', (event) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
