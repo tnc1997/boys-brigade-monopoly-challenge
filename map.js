@@ -23,8 +23,28 @@ export const BRISTOL_BOUNDS = [
  *
  * @typedef {object} RouteMap
  * @property {import('leaflet').Map} map The Leaflet map.
+ * @property {import('leaflet').LayerGroup} routeLayer The layer the route is drawn on.
  * @property {() => void} refresh Updates the map's size after its container has been shown or resized.
  */
+
+/**
+ * A place to mark on the map.
+ *
+ * @typedef {object} MapMarker
+ * @property {'start' | 'stop' | 'done' | 'finish' | 'skipped'} kind What the place is, which sets how it looks.
+ * @property {import('./planner.js').LatLng} location Where it is.
+ * @property {string} label What the marker shows: the stop's number, or a short symbol.
+ * @property {string} title A description for its tooltip and screen readers, like "1. Old Kent Road, ETA 11:02".
+ */
+
+/** How each kind of marker looks, as Tailwind classes. */
+const MARKER_CLASSES = {
+  start: 'bg-ink text-surface',
+  stop: 'bg-accent text-white',
+  done: 'bg-accent-line text-accent-ink',
+  finish: 'bg-ink text-surface',
+  skipped: 'bg-field text-ink opacity-80',
+};
 
 /**
  * Creates a Leaflet map with OpenStreetMap tiles, showing central Bristol.
@@ -41,5 +61,59 @@ export function createMap(container) {
   const map = L.map(container);
   L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
   map.fitBounds(BRISTOL_BOUNDS);
-  return { map, refresh: () => map.invalidateSize() };
+  const routeLayer = L.layerGroup().addTo(map);
+  return { map, routeLayer, refresh: () => map.invalidateSize() };
+}
+
+/**
+ * Draws the route: a line through the start, the stops in order and the
+ * finish, and a marker for each place, with skipped locations greyed out.
+ * Anything drawn before is replaced.
+ *
+ * @param {RouteMap} routeMap The map.
+ * @param {object} route What to draw.
+ * @param {import('./planner.js').LatLng[]} route.path The start, the stops in order and the finish (if there is one), for the line.
+ * @param {MapMarker[]} route.markers The places to mark.
+ * @param {boolean} shouldFit Whether to zoom the map to fit the route (not counting skipped locations), as after planning.
+ */
+export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
+  const { L } = globalThis;
+  routeLayer.clearLayers();
+  if (path.length > 1) {
+    // Leaflet sets the line's colour as an SVG attribute, which can't use the
+    // theme's CSS variables, so the colour comes from a class instead.
+    L.polyline(
+      path.map(({ lat, lng }) => [lat, lng]),
+      { className: 'stroke-accent', weight: 4, opacity: 0.8, interactive: false },
+    ).addTo(routeLayer);
+  }
+  // Skipped locations go underneath, so they don't hide the route.
+  const ordered = [...markers.filter(({ kind }) => kind === 'skipped'), ...markers.filter(({ kind }) => kind !== 'skipped')];
+  for (const { kind, location, label, title } of ordered) {
+    const size = kind === 'skipped' ? 22 : 30;
+    const icon = document.createElement('span');
+    icon.className = `flex size-full items-center justify-center rounded-full text-xs font-bold shadow ring-2 ring-surface ${MARKER_CLASSES[kind]}`;
+    icon.textContent = label;
+    const marker = L.marker([location.lat, location.lng], {
+      icon: L.divIcon({ html: icon, className: '', iconSize: [size, size] }),
+      title,
+      alt: title,
+      keyboard: true,
+      zIndexOffset: kind === 'skipped' ? -1000 : 0,
+    });
+    const popup = document.createElement('p');
+    popup.className = 'm-0 text-sm';
+    popup.textContent = title;
+    marker.bindPopup(popup).addTo(routeLayer);
+  }
+  // Fit the route itself, so far-off skipped locations don't zoom the map
+  // out so far that the stops overlap.
+  const onRoute = markers.filter(({ kind }) => kind !== 'skipped');
+  const fitted = onRoute.length > 1 ? onRoute : markers;
+  if (shouldFit && fitted.length > 0) {
+    map.fitBounds(
+      fitted.map(({ location }) => [location.lat, location.lng]),
+      { padding: [24, 24], maxZoom: 16 },
+    );
+  }
 }

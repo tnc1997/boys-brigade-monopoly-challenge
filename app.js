@@ -1,7 +1,7 @@
-import { describeRoute, formatDuration, progress, toggleDone } from './route.js';
+import { describeRoute, formatDuration, mapRoute, progress, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
-import { createMap } from './map.js';
+import { createMap, showRoute } from './map.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -26,6 +26,9 @@ const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
 let routeMap = null;
+
+/** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
+let shouldFitMap = true;
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -212,6 +215,7 @@ function showPlan() {
   const hasPlan = Boolean(plan?.settings);
   replan.classList.toggle('hidden', !hasPlan);
   replan.classList.toggle('flex', hasPlan);
+  updateMap();
   if (!hasPlan) {
     stopList.replaceChildren(element('p', 'text-sm text-muted', 'Add your locations above and press Plan route.'));
     return;
@@ -355,6 +359,7 @@ async function planRoute(from) {
     if (result.plan) {
       state.plan = result.plan;
       saveState(state);
+      shouldFitMap = true;
       showPlan();
     }
     return result.error;
@@ -432,11 +437,27 @@ function showView(view, shouldFocus = false) {
 function showMap() {
   if (routeMap) {
     routeMap.refresh();
+    updateMap();
     return;
   }
   routeMap = createMap(mapContainer);
   mapStatus.classList.toggle('hidden', routeMap !== null);
   mapStatus.textContent = routeMap ? '' : "The map couldn't load, which usually means there's no signal. The List tab still works.";
+  updateMap();
+}
+
+/**
+ * Draws the current plan on the map, if the map has been created and is
+ * showing. It zooms to fit the route the first time it's drawn after
+ * planning, but not after ticking off a stop, so the team's view stays put.
+ */
+function updateMap() {
+  if (!routeMap || mapContainer.closest('[hidden]')) {
+    return;
+  }
+  const route = state.plan?.settings ? mapRoute(state.plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
+  showRoute(routeMap, route, shouldFitMap);
+  shouldFitMap = false;
 }
 
 for (const tab of tabs) {
