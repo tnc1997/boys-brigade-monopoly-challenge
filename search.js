@@ -13,7 +13,16 @@
  * @typedef {Record<string, SearchResult>} SearchResults
  */
 
-/** OpenStreetMap's Nominatim search, which is free within its usage policy. */
+/**
+ * OpenStreetMap's Nominatim search, which is free within its usage policy:
+ * https://operations.osmfoundation.org/policies/nominatim/
+ *
+ * Keep to the policy when changing this module. Search only when the team
+ * presses a button (never as they type, which is forbidden), at most once a
+ * second, and save results so the same search isn't sent again. Keep the
+ * OpenStreetMap credit next to the location list, and send no personal data.
+ * If asked to stop using the service, change this URL and redeploy.
+ */
 export const SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
 
 /** The area searched, as Nominatim's `left,top,right,bottom`: Bristol and its outskirts. */
