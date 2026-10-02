@@ -1,4 +1,4 @@
-import { describeRoute, formatDuration, mapRoute, progress, toggleDone } from './route.js';
+import { describeRoute, formatDuration, mapRoute, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
@@ -30,6 +30,8 @@ const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('se
 const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
 const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
 const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
+const timeWarningBanner = /** @type {HTMLDivElement} */ (document.getElementById('time-warning'));
+const timeWarningText = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-text'));
 
 /** The settings panel's other fields, bound to `state.settings` or `state.setup` by their data attributes. */
 const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
@@ -239,6 +241,19 @@ function stopItem(stop, isFinish) {
   return item;
 }
 
+/**
+ * Shows or hides the warning that time is running out. The text is only
+ * changed when it changes, so screen readers don't announce it every minute.
+ */
+function showTimeWarning() {
+  const warning = state.plan?.settings ? timeWarning(state.plan, state.doneKeys, Date.now()) : null;
+  const message = warning?.message ?? '';
+  if (timeWarningText.textContent !== message) {
+    timeWarningText.textContent = message;
+  }
+  timeWarningBanner.classList.toggle('hidden', warning === null);
+}
+
 /** Shows the current plan as a list of stops, then any skipped and done locations. */
 function showPlan() {
   const { plan } = state;
@@ -247,6 +262,7 @@ function showPlan() {
   replan.classList.toggle('hidden', !hasPlan);
   replan.classList.toggle('flex', hasPlan);
   updateMap();
+  showTimeWarning();
   if (!hasPlan) {
     stopList.replaceChildren(element('p', 'text-sm text-muted', 'Add your locations above and press Plan route.'));
     return;
@@ -260,7 +276,7 @@ function showPlan() {
   const remaining = total - done;
   const locations = (count) => (count === 1 ? 'location' : 'locations');
   const visiting = done === 0 ? `${stopsToVisit} of ${total} ${locations(total)}` : `${stopsToVisit} of ${remaining} ${locations(remaining)} still to do`;
-  const summary = element('p', 'text-sm', `Visiting ${visiting}, ${ending}.`);
+  const summary = element('p', 'text-sm', remaining === 0 && total > 0 ? `All ${total} selfies done!` : `Visiting ${visiting}, ${ending}.`);
   const counter = element('p', 'mt-1 text-sm font-semibold text-accent-ink', `Selfies done: ${done} of ${total}`);
   counter.setAttribute('aria-live', 'polite');
 
@@ -648,6 +664,15 @@ settingsDialog.addEventListener('close', () => {
   // Re-plan with the new settings, keeping ticks, if there's a route to change.
   if (state.plan?.settings) {
     requestReplan();
+  }
+});
+
+// Recheck the time warning every minute, and when the team comes back to
+// the app, since timers can be paused while the phone is locked.
+setInterval(showTimeWarning, 60000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    showTimeWarning();
   }
 });
 

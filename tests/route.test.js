@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { describeRoute, directionsUrl, formatDuration, mapRoute, progress, toggleDone } from '../route.js';
+import { describeRoute, directionsUrl, formatDuration, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -169,5 +169,62 @@ describe('mapRoute', () => {
     const { markers, path } = mapRoute(plan, [], formatTime);
     assert.deepEqual(markers.filter(({ kind }) => kind === 'skipped').map(({ location }) => location.label), ['Old Kent Road', 'Temple Meads']);
     assert.deepEqual(path, [plan.start]);
+  });
+});
+
+describe('timeWarning', () => {
+  const minutes = (count) => count * 60000;
+
+  test('stays quiet when there is plenty of time and the team is on schedule', () => {
+    const plan = savedPlan();
+    assert.equal(timeWarning(plan, [], plan.startTime), null);
+    assert.equal(timeWarning(plan, [], plan.arrivalTimes[0] - minutes(1)), null);
+  });
+
+  test('tells the team to head to the finish when the time left is down to the safety margin', () => {
+    const plan = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
+    const warning = timeWarning(plan, [], plan.deadline - minutes(10));
+    assert.deepEqual(warning, { message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: warning.minutesBehind });
+  });
+
+  test("says time's nearly up when there's no finish", () => {
+    const plan = savedPlan();
+    assert.equal(timeWarning(plan, [], plan.deadline - minutes(1)).message, "Last few selfies, time's nearly up: 1 minute until the deadline.");
+  });
+
+  test('warns when the team is running late enough to push the route into the safety margin', () => {
+    // A short deadline leaves the route with little spare time, so running
+    // late for the first stop pushes the end into the margin.
+    const plan = savedPlan({ startTimeText: '15:10' });
+    assert.ok(plan.order.length > 0);
+    const spareMinutes = plan.spareSeconds / 60;
+    const late = timeWarning(plan, [], plan.arrivalTimes[0] + minutes(spareMinutes + 2));
+    assert.match(late.message, /^Running \d+ minutes behind plan/);
+    assert.ok(late.minutesBehind >= spareMinutes);
+    // Being late by less than the spare time is fine.
+    assert.equal(timeWarning(plan, [], plan.arrivalTimes[0] + minutes(spareMinutes / 2)), null);
+  });
+
+  test('measures lateness against the next stop that is not done', () => {
+    const plan = savedPlan({ startTimeText: '15:10' });
+    const allDone = plan.order.map((index) => plan.points[index].key);
+    // Everything is done, so there's no stop to be late for, and the time
+    // left is more than the margin.
+    assert.equal(timeWarning(plan, allDone, plan.arrivalTimes.at(-1) + minutes(1)), null);
+  });
+
+  test("doesn't warn when every stop is done and there's no finish to reach", () => {
+    const plan = savedPlan();
+    const allDone = plan.order.map((index) => plan.points[index].key);
+    assert.equal(timeWarning(plan, allDone, plan.deadline - minutes(5)), null);
+    const withFinish = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
+    const allDoneWithFinish = withFinish.order.map((index) => withFinish.points[index].key);
+    assert.match(timeWarning(withFinish, allDoneWithFinish, withFinish.deadline - minutes(5)).message, /^Head to the finish now/);
+  });
+
+  test('says when the deadline has passed', () => {
+    assert.equal(timeWarning(savedPlan(), [], savedPlan().deadline + minutes(5)).message, "The deadline has passed. Time's up.");
+    const withFinish = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
+    assert.equal(timeWarning(withFinish, [], withFinish.deadline).message, 'The deadline has passed. Head to the finish now.');
   });
 });

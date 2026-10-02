@@ -162,3 +162,58 @@ export function mapRoute(plan, doneKeys, formatTime) {
   const path = [plan.start, ...route.stops.map(({ location }) => location), ...(route.finish ? [route.finish.location] : [])];
   return { path, markers };
 }
+
+/**
+ * A warning that time is running out.
+ *
+ * @typedef {object} TimeWarning
+ * @property {string} message What to tell the team, which depends on whether there's a finish.
+ * @property {number} minutesLeft Minutes until the deadline, rounded up (0 once it has passed).
+ * @property {number} minutesBehind Whole minutes the team is behind the plan (0 if on time).
+ */
+
+/**
+ * Works out whether to warn the team that time is running out. It warns when
+ * the time left before the deadline is down to the safety margin, or when
+ * the team is running late for the next stop by enough to push the end of
+ * the route into the safety margin.
+ *
+ * @param {import('./setup.js').SavedPlan} plan The plan.
+ * @param {string[]} doneKeys Keys of the locations whose selfie has been taken.
+ * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @returns {TimeWarning | null} The warning, or `null` if there's enough time.
+ * @example
+ * timeWarning(plan, [], deadline - 10 * 60_000);
+ * // { message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: 0 }
+ */
+export function timeWarning(plan, doneKeys, now) {
+  const marginMs = plan.settings.safetyMarginSeconds * 1000;
+  const leftMs = plan.deadline - now;
+  const minutesLeft = Math.max(0, Math.ceil(leftMs / 60000));
+
+  // How late the team is for the first stop that isn't done yet.
+  const done = new Set(doneKeys);
+  const next = plan.order.findIndex((index) => !done.has(plan.points[index].key));
+  const behindMs = next === -1 ? 0 : Math.max(0, now - plan.arrivalTimes[next]);
+  const minutesBehind = Math.floor(behindMs / 60000);
+
+  const isShortOfTime = leftMs <= marginMs;
+  const isRunningLate = plan.endEta + behindMs > plan.deadline - marginMs;
+  // With every stop done and no finish to reach, there's nothing to hurry for.
+  const isAllDone = next === -1 && !plan.finish;
+  if ((!isShortOfTime && !isRunningLate) || (isAllDone && leftMs > 0)) {
+    return null;
+  }
+
+  let message;
+  if (leftMs <= 0) {
+    message = plan.finish ? 'The deadline has passed. Head to the finish now.' : "The deadline has passed. Time's up.";
+  } else {
+    const time = `${minutesLeft} ${minutesLeft === 1 ? 'minute' : 'minutes'} until the deadline`;
+    message = plan.finish ? `Head to the finish now: ${time}.` : `Last few selfies, time's nearly up: ${time}.`;
+    if (!isShortOfTime) {
+      message = `Running ${minutesBehind} ${minutesBehind === 1 ? 'minute' : 'minutes'} behind plan, so the route may not fit. Re-plan from here to see what still fits.`;
+    }
+  }
+  return { message, minutesLeft, minutesBehind };
+}
