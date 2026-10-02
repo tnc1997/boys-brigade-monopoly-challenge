@@ -83,7 +83,7 @@ export function walkSeconds(a, b, { speedKmh = 4.5, detourFactor = 1.3 } = {}) {
  * @property {number[]} arrivalTimes When the team arrives at each stop, in milliseconds since the Unix epoch, in the same order as `stops`.
  * @property {number} endEta When the route ends, in milliseconds since the Unix epoch. With a finish, this is the arrival time at the finish. Without one, it's when the last selfie is taken (or `startTime` if there are no stops).
  * @property {number} spareSeconds Time left between `endEta` and the deadline minus the safety margin. Negative when the route doesn't fit.
- * @property {boolean} fitsBudget Whether the route ends no later than the deadline minus the safety margin.
+ * @property {boolean} isWithinBudget Whether the route ends no later than the deadline minus the safety margin.
  */
 
 /**
@@ -100,7 +100,7 @@ export function walkSeconds(a, b, { speedKmh = 4.5, detourFactor = 1.3 } = {}) {
  *   stops: [{ lat: 51.4492, lng: -2.5813 }],
  *   startTime,
  *   deadline: Date.parse('2026-10-03T16:00:00+01:00'),
- * }).fitsBudget; // true
+ * }).isWithinBudget; // true
  */
 export function evaluateRoute({
   start,
@@ -135,5 +135,5 @@ export function evaluateRoute({
   }
 
   const spareSeconds = (deadline - safetyMarginSeconds * 1000 - time) / 1000;
-  return { arrivalTimes, endEta: time, spareSeconds, fitsBudget: spareSeconds >= 0 };
+  return { arrivalTimes, endEta: time, spareSeconds, isWithinBudget: spareSeconds >= 0 };
 }

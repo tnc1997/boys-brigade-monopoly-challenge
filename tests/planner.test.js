@@ -125,20 +125,20 @@ describe('evaluateRoute', () => {
     assertTimeClose(endEta, startTime + 3000_000);
   });
 
-  test('fits the budget when it ends before the deadline minus the safety margin', () => {
-    const { fitsBudget, spareSeconds } = evaluateRoute({ ...base, stops: [kmNorth(1)], finish: castlePark });
+  test('is within budget when it ends before the deadline minus the safety margin', () => {
+    const { isWithinBudget, spareSeconds } = evaluateRoute({ ...base, stops: [kmNorth(1)], finish: castlePark });
     // 2100 s used out of 5 h minus 600 s.
-    assert.equal(fitsBudget, true);
+    assert.equal(isWithinBudget, true);
     assert.ok(Math.abs(spareSeconds - (5 * 3600 - 600 - 2100)) < 2);
   });
 
-  test('does not fit the budget when it ends inside the safety margin', () => {
+  test('is not within budget when it ends inside the safety margin', () => {
     const stops = [kmNorth(1)];
     // The route takes 1100 s, so a deadline 1500 s away leaves only 400 s,
     // which is less than the 600 s safety margin.
     for (const finish of [null, kmNorth(1)]) {
-      const { fitsBudget, spareSeconds } = evaluateRoute({ ...base, stops, finish, deadline: startTime + 1500_000 });
-      assert.equal(fitsBudget, false);
+      const { isWithinBudget, spareSeconds } = evaluateRoute({ ...base, stops, finish, deadline: startTime + 1500_000 });
+      assert.equal(isWithinBudget, false);
       assert.ok(spareSeconds < 0);
     }
   });
