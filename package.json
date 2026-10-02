@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tailwindcss --input tailwind.css --output styles.css --minify",
-    "start": "concurrently --kill-others --names css,serve \"tailwindcss --input tailwind.css --output styles.css --watch\" \"serve . --listen 3000\"",
+    "start": "concurrently --kill-others --names tailwind,serve \"tailwindcss --input tailwind.css --output styles.css --watch\" \"serve . --listen 3000\"",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "devDependencies": {
