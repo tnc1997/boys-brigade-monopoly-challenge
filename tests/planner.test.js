@@ -436,3 +436,55 @@ describe('plan with 2-opt', () => {
     assert.ok(extraPoints > 0, 'expected 2-opt to fit extra points on some routes');
   });
 });
+
+describe('plan with swaps', () => {
+  // Points walked at 3.6 km/h (1 m/s) with no detour, so each kilometre takes
+  // exactly 1000 s.
+  const kmFrom = (northKm, eastKm = 0) => ({
+    lat: castlePark.lat + (northKm * 1000) / 111195,
+    lng: castlePark.lng + (eastKm * 1000) / (111195 * Math.cos((castlePark.lat * Math.PI) / 180)),
+  });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const options = (points, seconds, extra = {}) => ({
+    start: castlePark,
+    points,
+    startTime,
+    deadline: startTime + (seconds + 600) * 1000,
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 0,
+    safetyMarginSeconds: 600,
+    ...extra,
+  });
+
+  test('swaps one out-of-the-way stop for two nearby ones', () => {
+    // The nearest point is 1 km east, so greedy insertion goes there first
+    // and then has no time left. Two points 1.05 km and 1.1 km west fit
+    // together in 1100 s.
+    const points = [kmFrom(0, 1), kmFrom(0, -1.05), kmFrom(0, -1.1)];
+    const planOptions = options(points, 1500);
+    assert.deepEqual(greedyInsertion(planOptions), [0]);
+    const result = plan(planOptions);
+    assert.deepEqual(result.order, [1, 2]);
+    assert.deepEqual(result.skipped, [0]);
+    assert.ok(result.spareSeconds >= 0);
+  });
+
+  test('stops improving after about the time limit, even for 60 locations', () => {
+    const points = Array.from({ length: 60 }, (_, index) => kmFrom(Math.sin(index * 7.1) * 2.5, Math.cos(index * 3.3) * 2.5));
+    const planOptions = options(points, 5 * 3600, { dwellSeconds: 180, finish: castlePark });
+    const started = performance.now();
+    const result = plan(planOptions);
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed < 600, `took ${elapsed.toFixed(0)} ms`);
+    assert.ok(result.spareSeconds >= 0);
+    assert.ok(result.order.length >= greedyInsertion(planOptions).length);
+  });
+
+  test('still returns a route within budget with no time to improve it', () => {
+    const points = [kmFrom(0, 1), kmFrom(0, -1.05), kmFrom(0, -1.1)];
+    const result = plan({ ...options(points, 1500), timeLimitMs: 0 });
+    assert.deepEqual(result.order, [0]);
+    assert.ok(result.spareSeconds >= 0);
+  });
+});
