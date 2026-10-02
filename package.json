@@ -5,10 +5,14 @@
   "description": "Route planner for the Boys' Brigade Monopoly Challenge",
   "type": "module",
   "scripts": {
-    "start": "serve . --listen 3000",
+    "build": "tailwindcss --input tailwind.css --output styles.css --minify",
+    "start": "concurrently --kill-others --names tailwind,serve \"tailwindcss --input tailwind.css --output styles.css --watch\" \"serve . --listen 3000\"",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "devDependencies": {
-    "serve": "^14.2.4"
+    "@tailwindcss/cli": "^4.3.3",
+    "concurrently": "^10.0.5",
+    "serve": "^14.2.4",
+    "tailwindcss": "^4.3.3"
   }
 }
