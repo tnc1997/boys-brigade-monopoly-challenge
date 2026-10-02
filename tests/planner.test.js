@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { haversineMetres, walkSeconds } from '../planner.js';
+import { evaluateRoute, haversineMetres, walkSeconds } from '../planner.js';
 
 const castlePark = { lat: 51.4556, lng: -2.5894 };
 const cliftonSuspensionBridge = { lat: 51.4549, lng: -2.6278 };
@@ -75,5 +75,79 @@ describe('walkSeconds', () => {
     for (const detourFactor of [0.9, 0, NaN]) {
       assert.throws(() => walkSeconds(castlePark, oneKmNorth, { detourFactor }), RangeError);
     }
+  });
+});
+
+describe('evaluateRoute', () => {
+  // Points 1 km apart walked at 3.6 km/h (1 m/s) with no detour, so each
+  // kilometre takes exactly 1000 s.
+  const kmNorth = (km) => ({ lat: castlePark.lat + (km * 1000) / 111195, lng: castlePark.lng });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const deadline = Date.parse('2026-10-03T16:00:00+01:00');
+  const base = {
+    start: castlePark,
+    startTime,
+    deadline,
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 100,
+    safetyMarginSeconds: 600,
+  };
+  const assertTimesClose = (actual, expected) => {
+    assert.equal(actual.length, expected.length);
+    actual.forEach((time, index) => assert.ok(Math.abs(time - expected[index]) < 2000, `stop ${index}: ${time} vs ${expected[index]}`));
+  };
+  const assertTimeClose = (actual, expected) => assertTimesClose([actual], [expected]);
+
+  test('times each stop as the walk to it plus the selfie time at the previous stop', () => {
+    const { arrivalTimes } = evaluateRoute({ ...base, stops: [kmNorth(1), kmNorth(2)] });
+    assertTimesClose(arrivalTimes, [startTime + 1000_000, startTime + 2100_000]);
+  });
+
+  test('without a finish, ends when the last selfie is taken', () => {
+    const { endEta } = evaluateRoute({ ...base, stops: [kmNorth(1), kmNorth(2)] });
+    assertTimeClose(endEta, startTime + 2200_000);
+  });
+
+  test('with a finish, ends on arrival at the finish', () => {
+    const { endEta } = evaluateRoute({ ...base, stops: [kmNorth(1), kmNorth(2)], finish: castlePark });
+    assertTimeClose(endEta, startTime + 4200_000);
+  });
+
+  test('without stops or a finish, ends at the start time', () => {
+    const { arrivalTimes, endEta } = evaluateRoute({ ...base, stops: [] });
+    assert.deepEqual(arrivalTimes, []);
+    assert.equal(endEta, startTime);
+  });
+
+  test('without stops but with a finish, walks straight to the finish', () => {
+    const { endEta } = evaluateRoute({ ...base, stops: [], finish: kmNorth(3) });
+    assertTimeClose(endEta, startTime + 3000_000);
+  });
+
+  test('is within budget when it ends before the deadline minus the safety margin', () => {
+    const { isWithinBudget, spareSeconds } = evaluateRoute({ ...base, stops: [kmNorth(1)], finish: castlePark });
+    // 2100 s used out of 5 h minus 600 s.
+    assert.equal(isWithinBudget, true);
+    assert.ok(Math.abs(spareSeconds - (5 * 3600 - 600 - 2100)) < 2);
+  });
+
+  test('is not within budget when it ends inside the safety margin', () => {
+    const stops = [kmNorth(1)];
+    // The route takes 1100 s, so a deadline 1500 s away leaves only 400 s,
+    // which is less than the 600 s safety margin.
+    for (const finish of [null, kmNorth(1)]) {
+      const { isWithinBudget, spareSeconds } = evaluateRoute({ ...base, stops, finish, deadline: startTime + 1500_000 });
+      assert.equal(isWithinBudget, false);
+      assert.ok(spareSeconds < 0);
+    }
+  });
+
+  test('uses the default speed, detour factor, selfie time and safety margin', () => {
+    const { arrivalTimes, endEta, spareSeconds } = evaluateRoute({ start: castlePark, stops: [kmNorth(1)], startTime, deadline });
+    // 1 km × 1.3 at 4.5 km/h = 1040 s, then 180 s for the selfie.
+    assertTimesClose(arrivalTimes, [startTime + 1040_000]);
+    assertTimeClose(endEta, startTime + 1220_000);
+    assert.ok(Math.abs(spareSeconds - (5 * 3600 - 900 - 1220)) < 2);
   });
 });
