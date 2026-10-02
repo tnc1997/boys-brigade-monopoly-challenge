@@ -14,9 +14,15 @@
   </head>
   <body class="min-h-dvh overflow-x-hidden bg-page text-ink antialiased">
     <header class="bg-accent text-white">
-      <div class="mx-auto max-w-xl px-4 py-3">
-        <h1 class="text-lg font-semibold">Monopoly Challenge Planner</h1>
-        <p class="text-sm text-white/80">Boys' Brigade · Bristol</p>
+      <div class="mx-auto flex max-w-xl items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <h1 class="text-lg font-semibold">Monopoly Challenge Planner</h1>
+          <p class="text-sm text-white/80">Boys' Brigade · Bristol</p>
+        </div>
+        <p class="shrink-0 text-right">
+          <span id="countdown" class="block text-base font-semibold tabular-nums"></span>
+          <span id="countdown-deadline" class="block text-xs text-white/80"></span>
+        </p>
       </div>
     </header>
 

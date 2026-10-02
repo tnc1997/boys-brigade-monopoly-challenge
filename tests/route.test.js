@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { describeRoute, directionsUrl, formatDuration, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
+import { countdownText, describeRoute, directionsUrl, formatDuration, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -226,5 +226,30 @@ describe('timeWarning', () => {
     assert.equal(timeWarning(savedPlan(), [], savedPlan().deadline + minutes(5)).message, "The deadline has passed. Time's up.");
     const withFinish = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
     assert.equal(timeWarning(withFinish, [], withFinish.deadline).message, 'The deadline has passed. Head to the finish now.');
+  });
+});
+
+describe('countdownText', () => {
+  const deadline = new Date(2026, 9, 3, 16, 0).getTime();
+  const at = (hours, minutes, seconds = 0) => new Date(2026, 9, 3, hours, minutes, seconds).getTime();
+
+  test('shows hours and minutes left', () => {
+    assert.equal(countdownText(deadline, at(12, 48)), '3 h 12 min left');
+    assert.equal(countdownText(deadline, at(11, 0)), '5 h left');
+  });
+
+  test('rounds up to the next minute', () => {
+    assert.equal(countdownText(deadline, at(15, 45, 30)), '15 min left');
+    assert.equal(countdownText(deadline, at(15, 59, 30)), '1 min left');
+  });
+
+  test('says when the deadline has passed', () => {
+    assert.equal(countdownText(deadline, deadline), 'Deadline passed');
+    assert.equal(countdownText(deadline, at(16, 5)), 'Deadline passed');
+  });
+
+  test('says when there is no deadline', () => {
+    assert.equal(countdownText(null, at(12, 0)), 'No deadline set');
+    assert.equal(countdownText(NaN, at(12, 0)), 'No deadline set');
   });
 });
