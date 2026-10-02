@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { parseWords } from '../w3w.js';
+import { parseWords } from '../what3words.js';
 
 describe('parseWords', () => {
   const valid = [
