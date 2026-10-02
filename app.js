@@ -609,6 +609,10 @@ settingsButton.addEventListener('click', () => {
   settingsDialog.showModal();
 });
 
+// Cancel is a plain button, so pressing Enter in a field submits with Save
+// rather than the first button in the form.
+document.getElementById('settings-cancel').addEventListener('click', () => settingsDialog.close('cancel'));
+
 settingsDialog.addEventListener('close', () => {
   if (settingsDialog.returnValue !== 'save') {
     return;
