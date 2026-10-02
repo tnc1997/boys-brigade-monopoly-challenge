@@ -21,6 +21,7 @@ const searchStatus = /** @type {HTMLParagraphElement} */ (document.getElementByI
 const locationMatches = /** @type {HTMLDivElement} */ (document.getElementById('location-matches'));
 const locationMatchesList = /** @type {HTMLUListElement} */ (document.getElementById('location-matches-list'));
 const planButton = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
+const planAnnouncement = /** @type {HTMLParagraphElement} */ (document.getElementById('plan-announcement'));
 const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('[role="tab"][data-view]')]);
 const mapContainer = /** @type {HTMLDivElement} */ (document.getElementById('map'));
 const settingsButton = /** @type {HTMLButtonElement} */ (document.getElementById('settings-button'));
@@ -373,6 +374,23 @@ function showMatches(matches) {
 }
 
 /**
+ * Tells screen readers how planning went, since the line preview and route
+ * update without being announced. Problems that stop planning are already
+ * announced by the setup error alert.
+ *
+ * @param {import('./setup.js').SetupResult} result The result of planning.
+ */
+function announcePlan(result) {
+  if (!result.plan) {
+    return;
+  }
+  const stops = result.plan.order.length;
+  const problems = result.invalidLines.length;
+  const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  planAnnouncement.textContent = `Planned ${plural(stops, 'stop', 'stops')}.${problems > 0 ? ` ${plural(problems, 'line has a problem', 'lines have problems')}.` : ''}`;
+}
+
+/**
  * Shows the progress of looking up addresses, or hides it.
  *
  * @param {string | null} message The message, or `null` to hide it.
@@ -422,6 +440,7 @@ async function planRoute(from) {
     showLines(result.lines);
     showMatches(result.matches);
     showSetupError(result.error);
+    announcePlan(result);
     if (result.plan) {
       state.plan = result.plan;
       saveState(state);
