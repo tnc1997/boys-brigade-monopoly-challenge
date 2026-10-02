@@ -2,7 +2,7 @@ import { describeRoute, formatDuration, mapRoute, progress, toggleDone } from '.
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
-import { SPEED_PRESETS, SPEED_RANGE, speedPreset } from './settings.js';
+import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { defaultState, loadState, saveState } from './storage.js';
 
@@ -29,6 +29,7 @@ const speedPresets = /** @type {HTMLDivElement} */ (document.getElementById('spe
 const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('settings-speed'));
 const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
 const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
+const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
 
 /** The settings panel's other fields, bound to `state.settings` or `state.setup` by their data attributes. */
 const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
@@ -97,6 +98,17 @@ function saveField(field) {
     state.settings[field.dataset.setting] = field.value;
   }
   saveState(state);
+  showSettingsSummary();
+}
+
+/**
+ * Shows the walking speed and selfie time under the Route heading, noting
+ * when they've changed since the current plan was made.
+ */
+function showSettingsSummary() {
+  const planned = state.plan?.settings;
+  const isOutOfDate = planned && (planned.speedKmh !== state.settings.speedKmh || planned.dwellSeconds !== state.settings.dwellSeconds);
+  settingsSummaryText.textContent = `Planning for ${settingsSummary(state.settings)}${isOutOfDate ? ' (re-plan to use these)' : ''}`;
 }
 
 /**
@@ -380,6 +392,7 @@ async function planRoute(from) {
       saveState(state);
       shouldFitMap = true;
       showPlan();
+      showSettingsSummary();
     }
     return result.error;
   } finally {
@@ -631,6 +644,7 @@ settingsDialog.addEventListener('close', () => {
   }
   saveState(state);
   fillForm();
+  showSettingsSummary();
   // Re-plan with the new settings, keeping ticks, if there's a route to change.
   if (state.plan?.settings) {
     requestReplan();
@@ -638,6 +652,7 @@ settingsDialog.addEventListener('close', () => {
 });
 
 fillForm();
+showSettingsSummary();
 previewLines();
 showView(state.view);
 showPlan();

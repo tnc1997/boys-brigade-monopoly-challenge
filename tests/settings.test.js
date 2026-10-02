@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { SPEED_PRESETS, SPEED_RANGE, speedPreset } from '../settings.js';
+import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from '../settings.js';
 import { defaultState } from '../storage.js';
 
 describe('speedPreset', () => {
@@ -31,5 +31,24 @@ describe('speedPreset', () => {
     for (const { speedKmh } of SPEED_PRESETS) {
       assert.ok(speedKmh >= SPEED_RANGE.min && speedKmh <= SPEED_RANGE.max);
     }
+  });
+});
+
+describe('settingsSummary', () => {
+  test('names the preset when the speed matches one', () => {
+    assert.equal(settingsSummary({ speedKmh: 4.5, dwellSeconds: 180 }), 'Medium 4.5 km/h · 3 min/selfie');
+    assert.equal(settingsSummary({ speedKmh: 3.5, dwellSeconds: 300 }), 'Slow 3.5 km/h · 5 min/selfie');
+  });
+
+  test('shows just the speed between presets', () => {
+    assert.equal(settingsSummary({ speedKmh: 4.2, dwellSeconds: 180 }), '4.2 km/h · 3 min/selfie');
+  });
+
+  test('shows half minutes of selfie time', () => {
+    assert.equal(settingsSummary({ speedKmh: 4.5, dwellSeconds: 90 }), 'Medium 4.5 km/h · 1.5 min/selfie');
+  });
+
+  test('says when a setting is missing', () => {
+    assert.equal(settingsSummary({ speedKmh: NaN, dwellSeconds: NaN }), 'speed not set · selfie time not set');
   });
 });

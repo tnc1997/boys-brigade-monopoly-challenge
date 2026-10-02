@@ -28,3 +28,20 @@ export const SPEED_RANGE = { min: 2, max: 7, step: 0.1 };
 export function speedPreset(speedKmh) {
   return SPEED_PRESETS.find((preset) => Math.abs(preset.speedKmh - speedKmh) < 0.05) ?? null;
 }
+
+/**
+ * Summarises the settings the plan assumes, so the whole team can see them.
+ *
+ * @param {Pick<import('./storage.js').Settings, 'speedKmh' | 'dwellSeconds'>} settings The settings.
+ * @returns {string} A summary like `Medium 4.5 km/h · 3 min/selfie`.
+ * @example
+ * settingsSummary({ speedKmh: 3.5, dwellSeconds: 300 }); // 'Slow 3.5 km/h · 5 min/selfie'
+ * settingsSummary({ speedKmh: 4.2, dwellSeconds: 90 }); // '4.2 km/h · 1.5 min/selfie'
+ */
+export function settingsSummary({ speedKmh, dwellSeconds }) {
+  const speed = Number.isFinite(speedKmh) ? `${speedKmh.toFixed(1)} km/h` : 'speed not set';
+  const preset = speedPreset(speedKmh);
+  const minutes = dwellSeconds / 60;
+  const selfie = Number.isFinite(minutes) ? `${Number.isInteger(minutes) ? minutes : minutes.toFixed(1)} min/selfie` : 'selfie time not set';
+  return `${preset ? `${preset.name} ` : ''}${speed} · ${selfie}`;
+}
