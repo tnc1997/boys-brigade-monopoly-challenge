@@ -3,8 +3,35 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Plan a walking route that visits as many Monopoly Challenge locations as possible before the deadline.">
     <title>Monopoly Challenge Planner</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <script type="module" src="app.js"></script>
   </head>
-  <body>
+  <body class="min-h-dvh overflow-x-hidden bg-slate-50 text-slate-900 antialiased">
+    <header class="bg-emerald-700 text-white">
+      <div class="mx-auto max-w-xl px-4 py-3">
+        <h1 class="text-lg font-semibold">Monopoly Challenge Planner</h1>
+        <p class="text-sm text-emerald-100">Boys' Brigade · Bristol</p>
+      </div>
+    </header>
+
+    <main class="mx-auto flex max-w-xl flex-col gap-4 px-4 py-4">
+      <section id="setup" aria-labelledby="setup-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <h2 id="setup-heading" class="text-base font-semibold">Setup</h2>
+        <div id="setup-form" class="mt-3"></div>
+      </section>
+
+      <section id="stops" aria-labelledby="stops-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <h2 id="stops-heading" class="text-base font-semibold">Route</h2>
+        <div id="stop-list" class="mt-3">
+          <p class="text-sm text-slate-600">Add your locations above and press Plan route.</p>
+        </div>
+      </section>
+    </main>
+
+    <noscript>
+      <p class="mx-auto max-w-xl px-4 pb-4 text-sm text-red-700">This planner needs JavaScript to work.</p>
+    </noscript>
   </body>
 </html>
