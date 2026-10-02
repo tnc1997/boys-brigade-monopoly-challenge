@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { evaluateRoute, haversineMetres, walkSeconds } from '../planner.js';
+import { evaluateRoute, greedyInsertion, haversineMetres, walkSeconds } from '../planner.js';
 
 const castlePark = { lat: 51.4556, lng: -2.5894 };
 const cliftonSuspensionBridge = { lat: 51.4549, lng: -2.6278 };
@@ -149,5 +149,93 @@ describe('evaluateRoute', () => {
     assertTimesClose(arrivalTimes, [startTime + 1040_000]);
     assertTimeClose(endEta, startTime + 1220_000);
     assert.ok(Math.abs(spareSeconds - (5 * 3600 - 900 - 1220)) < 2);
+  });
+});
+
+describe('greedyInsertion', () => {
+  // Points walked at 3.6 km/h (1 m/s) with no detour, so each kilometre takes
+  // exactly 1000 s.
+  const kmFrom = (northKm, eastKm = 0) => ({
+    lat: castlePark.lat + (northKm * 1000) / 111195,
+    lng: castlePark.lng + (eastKm * 1000) / (111195 * Math.cos((castlePark.lat * Math.PI) / 180)),
+  });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const base = {
+    start: castlePark,
+    startTime,
+    deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 100,
+    safetyMarginSeconds: 600,
+  };
+  const withDeadlineAfter = (seconds) => ({ ...base, deadline: startTime + (seconds + base.safetyMarginSeconds) * 1000 });
+
+  // Small seeded random number generator (mulberry32), so the random tests
+  // are repeatable.
+  const random = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  test('returns an empty route when there are no points', () => {
+    assert.deepEqual(greedyInsertion({ ...base, points: [] }), []);
+  });
+
+  test('visits every point in order along a line when there is plenty of time', () => {
+    const points = [kmFrom(3), kmFrom(1), kmFrom(2)];
+    assert.deepEqual(greedyInsertion({ ...base, points }), [1, 2, 0]);
+  });
+
+  test('visits every point and returns to a finish at the start when there is plenty of time', () => {
+    const points = [kmFrom(1), kmFrom(1, 1), kmFrom(0, 1)];
+    const order = greedyInsertion({ ...base, points, finish: castlePark });
+    assert.deepEqual([...order].sort(), [0, 1, 2]);
+  });
+
+  test('leaves out points that do not fit, keeping the nearest', () => {
+    const points = [kmFrom(3), kmFrom(1), kmFrom(2)];
+    // 2 km of walking plus two selfies is 2200 s; a third point needs 1100 s more.
+    assert.deepEqual(greedyInsertion({ ...withDeadlineAfter(2500), points }), [1, 2]);
+  });
+
+  test('prefers points on the way to the finish over detours', () => {
+    const points = [kmFrom(-1), kmFrom(1)];
+    // The walk to the finish takes 3000 s, the point on the way adds only its
+    // 100 s selfie, and the detour south adds 2100 s.
+    const order = greedyInsertion({ ...withDeadlineAfter(3500), points, finish: kmFrom(3) });
+    assert.deepEqual(order, [1]);
+  });
+
+  test('returns an empty route when even the walk to the finish does not fit', () => {
+    const order = greedyInsertion({ ...withDeadlineAfter(1000), points: [kmFrom(1)], finish: kmFrom(3) });
+    assert.deepEqual(order, []);
+  });
+
+  test('visits at least as many points without a finish as with one', () => {
+    const points = [kmFrom(1), kmFrom(2), kmFrom(3), kmFrom(4)];
+    const options = { ...withDeadlineAfter(4500), points };
+    const withoutFinish = greedyInsertion(options);
+    const withFinish = greedyInsertion({ ...options, finish: castlePark });
+    assert.equal(withoutFinish.length, 4);
+    assert.equal(withFinish.length, 2);
+  });
+
+  test('never goes over the time budget on random routes', () => {
+    const next = random(42);
+    for (let run = 0; run < 200; run += 1) {
+      const points = Array.from({ length: 2 + Math.floor(next() * 30) }, () => kmFrom(next() * 6 - 3, next() * 6 - 3));
+      const finish = next() < 0.5 ? null : kmFrom(next() * 6 - 3, next() * 6 - 3);
+      const options = { ...withDeadlineAfter(next() * 20000), points, finish };
+      const order = greedyInsertion(options);
+      assert.equal(new Set(order).size, order.length, 'visits each point at most once');
+      assert.ok(order.every((index) => index >= 0 && index < points.length), 'returns valid indexes');
+      const stops = order.map((index) => points[index]);
+      if (order.length > 0 || finish === null) {
+        assert.ok(evaluateRoute({ ...options, stops }).isWithinBudget, `run ${run} is over budget`);
+      }
+    }
   });
 });

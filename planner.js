@@ -137,3 +137,77 @@ export function evaluateRoute({
   const spareSeconds = (deadline - safetyMarginSeconds * 1000 - time) / 1000;
   return { arrivalTimes, endEta: time, spareSeconds, isWithinBudget: spareSeconds >= 0 };
 }
+
+/**
+ * Options for planning a route, the same as {@link RouteOptions} except that
+ * `points` are the candidate locations in any order, rather than `stops` in
+ * visiting order.
+ *
+ * @typedef {Omit<RouteOptions, 'stops'> & { points: LatLng[] }} PlanOptions
+ */
+
+/**
+ * Builds a route by greedy insertion. It repeatedly adds the unvisited point
+ * that adds the least time at its cheapest position in the route, for as long
+ * as the route still fits within the deadline minus the safety margin. With a
+ * finish, the route runs start → … → finish. Without one, it runs start → … →
+ * last stop, so adding a point at the end costs only the walk to it.
+ *
+ * @param {PlanOptions} options The candidate points and the settings to plan with.
+ * @returns {number[]} Indexes into `points`, in visiting order. Points that don't fit are left out.
+ * @example
+ * greedyInsertion({
+ *   start: { lat: 51.4556, lng: -2.5894 },
+ *   points: [{ lat: 51.4549, lng: -2.6278 }, { lat: 51.4492, lng: -2.5813 }],
+ *   startTime: Date.parse('2026-10-03T11:00:00+01:00'),
+ *   deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+ * }); // [1, 0]
+ */
+export function greedyInsertion({
+  start,
+  points,
+  finish = null,
+  startTime,
+  deadline,
+  speedKmh = 4.5,
+  detourFactor = 1.3,
+  dwellSeconds = 180,
+  safetyMarginSeconds = 900,
+}) {
+  // Nodes are the start, then each point, then the finish (if there is one).
+  const nodes = [start, ...points, ...(finish ? [finish] : [])];
+  const walk = nodes.map((a) => nodes.map((b) => walkSeconds(a, b, { speedKmh, detourFactor })));
+  const startNode = 0;
+  const finishNode = finish ? nodes.length - 1 : null;
+  const budgetSeconds = (deadline - startTime) / 1000 - safetyMarginSeconds;
+
+  // The route holds point nodes (1 to points.length) in visiting order.
+  const route = [];
+  let routeSeconds = finishNode === null ? 0 : walk[startNode][finishNode];
+  const unvisited = new Set(points.map((_, index) => index + 1));
+
+  while (unvisited.size > 0) {
+    let best = null;
+    for (const node of unvisited) {
+      for (let position = 0; position <= route.length; position += 1) {
+        const previous = position === 0 ? startNode : route[position - 1];
+        const next = position === route.length ? finishNode : route[position];
+        const addedSeconds =
+          dwellSeconds +
+          walk[previous][node] +
+          (next === null ? 0 : walk[node][next] - walk[previous][next]);
+        if (best === null || addedSeconds < best.addedSeconds) {
+          best = { node, position, addedSeconds };
+        }
+      }
+    }
+    if (routeSeconds + best.addedSeconds > budgetSeconds) {
+      break;
+    }
+    route.splice(best.position, 0, best.node);
+    routeSeconds += best.addedSeconds;
+    unvisited.delete(best.node);
+  }
+
+  return route.map((node) => node - 1);
+}
