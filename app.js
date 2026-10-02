@@ -4,7 +4,7 @@ import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, speedPreset } from './settings.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
-import { loadState, saveState } from './storage.js';
+import { defaultState, loadState, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
 const state = loadState();
@@ -592,7 +592,8 @@ speedPresets.replaceChildren(
 speedSlider.addEventListener('input', () => showSettingsSpeed(Number(speedSlider.value)));
 
 settingsButton.addEventListener('click', () => {
-  showSettingsSpeed(state.settings.speedKmh);
+  // The setup form's speed field can be empty, which saves NaN.
+  showSettingsSpeed(Number.isFinite(state.settings.speedKmh) ? state.settings.speedKmh : defaultState().settings.speedKmh);
   settingsSave.textContent = state.plan?.settings ? 'Save and re-plan' : 'Save';
   settingsDialog.showModal();
 });
