@@ -23,13 +23,14 @@
           <div class="flex flex-col gap-1">
             <label for="locations" class="text-sm font-medium">Locations</label>
             <p id="locations-hint" class="text-xs text-slate-600">
-              One per line, each with its coordinates (like <code>51.4545,-2.5879</code>), a full Google Maps link, or an address or place name to look up, plus an optional what3words address.
+              One per line, each with its coordinates (like <code>51.4545,-2.5879</code>), a full Google Maps link, or an address or place name to look up.
               To label an address, put the label first with a colon, like <code>Old Kent Road: Queen Square, Bristol</code>.
-              For a what3words address, tap Navigate in the what3words app and copy the address it gives, or long-press the same spot in Google Maps to drop a pin and copy the coordinates from the search box.
+              For a what3words address, tap Navigate in the what3words app and paste the address it gives instead.
+              To get coordinates on a phone, long-press the spot in Google Maps to drop a pin, then copy them from the search box.
               Addresses are looked up with <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener" class="underline">OpenStreetMap Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" class="underline">OpenStreetMap contributors</a>.
             </p>
             <textarea id="locations" data-setup="locationsText" rows="8" aria-describedby="locations-hint" spellcheck="false" autocapitalize="off"
-              placeholder="Old Kent Road ///filled.count.soap 51.4545,-2.5879"
+              placeholder="Old Kent Road 51.4545,-2.5879"
               class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"></textarea>
             <p id="search-status" class="hidden text-sm text-slate-600" role="status"></p>
             <ul id="location-errors" class="flex flex-col gap-1 text-sm text-red-700" aria-live="polite"></ul>

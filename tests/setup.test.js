@@ -53,7 +53,7 @@ describe('planFromSetup', () => {
     const { plan, invalidLines } = planFromSetup(setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\nWhitechapel ///filled.count.soap\nNowhere' }));
     assert.equal(plan.points.length, 1);
     assert.deepEqual(invalidLines.map(({ lineNumber }) => lineNumber), [2, 3]);
-    assert.equal(invalidLines[0].result.lookupUrl, 'https://what3words.com/filled.count.soap');
+    assert.match(invalidLines[0].result.error, /what3words address/);
   });
 
   test('uses the start time when one is entered', () => {
@@ -83,7 +83,7 @@ describe('planFromSetup', () => {
     const later = new Date(2026, 9, 3, 13, 15).getTime();
     const { plan, error } = planFromSetup({ ...setupWith({ startText: 'not a location', startTimeText: '11:00' }), now: later, from });
     assert.equal(error, null);
-    assert.deepEqual(plan.start, { lat: 51.4492, lng: -2.5813, label: 'Your position', words: null, key: '51.449200,-2.581300' });
+    assert.deepEqual(plan.start, { lat: 51.4492, lng: -2.5813, label: 'Your position', key: '51.449200,-2.581300' });
     assert.equal(plan.startTime, later);
   });
 
@@ -121,7 +121,7 @@ describe('planFromSetup with addresses and place names', () => {
 
   test('plans looked-up locations and says what each matched', () => {
     const { plan, matches, invalidLines } = planFromSetup({
-      ...setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\n///filled.count.soap Queen Square, Bristol', finishText: 'Temple Meads' }),
+      ...setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\nQueen Square, Bristol', finishText: 'Temple Meads' }),
       searchResults,
     });
     assert.deepEqual(invalidLines, []);
@@ -141,7 +141,7 @@ describe('planFromSetup with addresses and place names', () => {
 });
 
 describe('searchesNeeded', () => {
-  test('lists the lines, start and finish that need looking up', () => {
+  test('lists the lines, start and finish that need looking up, but not what3words addresses', () => {
     const setup = { ...defaultState().setup, locationsText: 'Old Kent Road 51.4545,-2.5879\nQueen Square, Bristol\n///filled.count.soap', startText: 'Temple Meads', finishText: 'Cabot Tower' };
     assert.deepEqual(searchesNeeded({ setup }), ['Queen Square, Bristol', 'Temple Meads', 'Cabot Tower']);
   });

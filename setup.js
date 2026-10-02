@@ -92,7 +92,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   }
 
   const start = from
-    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', words: null, key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
+    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
     : parseLocation(setup.startText, { searchResults });
   addMatch('Start', from ? null : start);
   if (!start.isValid) {

@@ -9,7 +9,6 @@ import { walkSeconds } from './planner.js';
  * @property {number} arrivalTime When the team arrives, in milliseconds since the Unix epoch.
  * @property {number} walkSeconds How long the walk from the previous stop (or the start) takes, in seconds.
  * @property {string} directionsUrl A Google Maps link with walking directions to the location.
- * @property {string | null} what3wordsUrl A link to the location's what3words address, or `null` if it doesn't have one.
  */
 
 /**
@@ -17,7 +16,7 @@ import { walkSeconds } from './planner.js';
  *
  * @typedef {object} RouteView
  * @property {RouteStop[]} stops The stops in visiting order.
- * @property {RouteStop | null} finish The walk to the finish, or `null` if there's no finish. Its `number` is 0 and its `what3wordsUrl` is `null` unless the finish has a what3words address.
+ * @property {RouteStop | null} finish The walk to the finish, or `null` if there's no finish. Its `number` is 0.
  * @property {number} endEta When the route ends, in milliseconds since the Unix epoch.
  * @property {import('./locations.js').Location[]} skipped The locations that don't fit, in list order.
  */
@@ -73,7 +72,6 @@ export function describeRoute(plan) {
     arrivalTime,
     walkSeconds: walkSeconds(previous, location, walkOptions),
     directionsUrl: directionsUrl(location),
-    what3wordsUrl: location.words ? `https://what3words.com/${location.words}` : null,
   });
 
   const stops = plan.order.map((index, position) =>
