@@ -488,3 +488,86 @@ describe('plan with swaps', () => {
     assert.ok(result.spareSeconds >= 0);
   });
 });
+
+describe('plan compared with the best possible route', () => {
+  // Points walked at 3.6 km/h (1 m/s) with no detour, so each kilometre takes
+  // exactly 1000 s.
+  const kmFrom = (northKm, eastKm = 0) => ({
+    lat: castlePark.lat + (northKm * 1000) / 111195,
+    lng: castlePark.lng + (eastKm * 1000) / (111195 * Math.cos((castlePark.lat * Math.PI) / 180)),
+  });
+  const random = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const randomOptions = (next, { count, hasFinish }) => ({
+    start: castlePark,
+    points: Array.from({ length: count }, () => kmFrom(next() * 6 - 3, next() * 6 - 3)),
+    finish: hasFinish ? kmFrom(next() * 6 - 3, next() * 6 - 3) : null,
+    startTime: 0,
+    deadline: (2000 + next() * 12000 + 600) * 1000,
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 100,
+    safetyMarginSeconds: 600,
+  });
+
+  /**
+   * Finds the most points any route can visit, by trying every order.
+   * Adding a stop never makes a route quicker, so an order that doesn't fit
+   * can't be extended into one that does, and is skipped.
+   */
+  const bestPossible = (options) => {
+    let best = 0;
+    const extend = (order, used) => {
+      best = Math.max(best, order.length);
+      for (let index = 0; index < options.points.length; index += 1) {
+        if (used.has(index)) {
+          continue;
+        }
+        const candidate = [...order, index];
+        if (evaluateRoute({ ...options, stops: candidate.map((point) => options.points[point]) }).isWithinBudget) {
+          used.add(index);
+          extend(candidate, used);
+          used.delete(index);
+        }
+      }
+    };
+    extend([], new Set());
+    return best;
+  };
+
+  // plan() is a heuristic, so it can't always find the best route. These
+  // tolerances match how it does today. Multi-start (#77) should tighten
+  // them to never more than 1 short, and never fewer without a finish.
+  test('visits the most points possible on at least 95% of small random cases, and is never more than 1 short', () => {
+    const next = random(20);
+    const runs = 300;
+    let matches = 0;
+    for (let run = 0; run < runs; run += 1) {
+      const options = randomOptions(next, { count: 3 + Math.floor(next() * 6), hasFinish: next() < 0.5 });
+      const best = bestPossible(options);
+      const visited = plan(options).order.length;
+      assert.ok(visited <= best, `run ${run} visits more than is possible`);
+      assert.ok(best - visited <= 1, `run ${run} visits ${visited} of a possible ${best}`);
+      matches += visited === best ? 1 : 0;
+    }
+    assert.ok(matches >= runs * 0.95, `matched the best route on ${matches} of ${runs} cases`);
+  });
+
+  test('without a finish, visits at least as many points as with one on at least 95% of random cases, and is never more than 4 fewer', () => {
+    const next = random(21);
+    const runs = 300;
+    let atLeastAsMany = 0;
+    for (let run = 0; run < runs; run += 1) {
+      const options = randomOptions(next, { count: 3 + Math.floor(next() * 30), hasFinish: false });
+      const withoutFinish = plan(options).order.length;
+      const withFinish = plan({ ...options, finish: kmFrom(next() * 6 - 3, next() * 6 - 3) }).order.length;
+      assert.ok(withFinish - withoutFinish <= 4, `run ${run} visits ${withoutFinish} without a finish but ${withFinish} with one`);
+      atLeastAsMany += withoutFinish >= withFinish ? 1 : 0;
+    }
+    assert.ok(atLeastAsMany >= runs * 0.95, `visited at least as many without a finish on ${atLeastAsMany} of ${runs} cases`);
+  });
+});
