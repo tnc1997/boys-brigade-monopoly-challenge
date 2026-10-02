@@ -29,3 +29,34 @@ export function haversineMetres(a, b) {
     Math.cos(toRadians(a.lat)) * Math.cos(toRadians(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_METRES * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+
+/**
+ * Options for estimating walking time.
+ *
+ * @typedef {object} WalkOptions
+ * @property {number} [speedKmh=4.5] Walking speed of the whole group in km/h. Must be greater than 0.
+ * @property {number} [detourFactor=1.3] How much longer the walk along streets is than the straight line. Must be at least 1.
+ */
+
+/**
+ * Estimates the time taken to walk between two points. Streets aren't
+ * straight, so the straight-line distance is multiplied by a detour factor.
+ *
+ * @param {LatLng} a Where the walk starts.
+ * @param {LatLng} b Where the walk ends.
+ * @param {WalkOptions} [options] Walking speed and detour factor.
+ * @returns {number} The estimated walking time in seconds.
+ * @throws {RangeError} If `speedKmh` isn't greater than 0 or `detourFactor` is less than 1.
+ * @example
+ * walkSeconds({ lat: 51.4556, lng: -2.5894 }, { lat: 51.4492, lng: -2.5813 }); // ≈ 943 (about 16 minutes)
+ */
+export function walkSeconds(a, b, { speedKmh = 4.5, detourFactor = 1.3 } = {}) {
+  if (!(speedKmh > 0)) {
+    throw new RangeError(`speedKmh must be greater than 0, but was ${speedKmh}`);
+  }
+  if (!(detourFactor >= 1)) {
+    throw new RangeError(`detourFactor must be at least 1, but was ${detourFactor}`);
+  }
+  const metresPerSecond = (speedKmh * 1000) / 3600;
+  return (haversineMetres(a, b) * detourFactor) / metresPerSecond;
+}
