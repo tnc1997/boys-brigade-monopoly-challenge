@@ -74,19 +74,7 @@ function saveField(field) {
  * @param {import('./locations.js').ParsedLocationLine[]} invalidLines The lines to show.
  */
 function showInvalidLines(invalidLines) {
-  locationErrors.replaceChildren(
-    ...invalidLines.map(({ lineNumber, result }) => {
-      const item = element('li', '', `Line ${lineNumber}: ${result.error} `);
-      if (result.lookupUrl) {
-        const link = element('a', 'font-medium underline', 'Open in what3words');
-        link.href = result.lookupUrl;
-        link.target = '_blank';
-        link.rel = 'noopener';
-        item.append(link);
-      }
-      return item;
-    }),
-  );
+  locationErrors.replaceChildren(...invalidLines.map(({ lineNumber, result }) => element('li', '', `Line ${lineNumber}: ${result.error}`)));
 }
 
 /**
@@ -172,9 +160,6 @@ function stopItem(stop, isFinish) {
     links.append(doneToggle(stop.location, isDone));
   }
   links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
-  if (stop.what3wordsUrl) {
-    links.append(externalLink(stop.what3wordsUrl, 'what3words', `${stop.location.label} in what3words`));
-  }
   details.append(title, timing, links);
   item.append(badge, details);
   return item;

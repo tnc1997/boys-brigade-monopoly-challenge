@@ -10,7 +10,7 @@ const now = new Date(2026, 9, 3, 11, 0).getTime();
 const savedPlan = (setup = {}, settings = {}) => {
   const state = defaultState();
   return planFromSetup({
-    setup: { ...state.setup, locationsText: 'Old Kent Road ///filled.count.soap 51.4545,-2.5879\nTemple Meads 51.4492,-2.5813', ...setup },
+    setup: { ...state.setup, locationsText: 'Old Kent Road 51.4545,-2.5879\nTemple Meads 51.4492,-2.5813', ...setup },
     settings: { ...state.settings, ...settings },
     now,
   }).plan;
@@ -63,13 +63,6 @@ describe('describeRoute', () => {
       time += (position > 0 ? plan.settings.dwellSeconds : 0) * 1000 + stop.walkSeconds * 1000;
       assert.ok(Math.abs(time - stop.arrivalTime) < 1, `stop ${stop.number}`);
     }
-  });
-
-  test('links to the what3words address only when there is one', () => {
-    const { stops } = describeRoute(savedPlan());
-    const byLabel = Object.fromEntries(stops.map((stop) => [stop.location.label, stop.what3wordsUrl]));
-    assert.equal(byLabel['Old Kent Road'], 'https://what3words.com/filled.count.soap');
-    assert.equal(byLabel['Temple Meads'], null);
   });
 
   test('has no finish when the plan has none, and ends with the last selfie', () => {

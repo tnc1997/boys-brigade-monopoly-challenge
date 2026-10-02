@@ -308,7 +308,7 @@ describe('plan', () => {
   }
 
   test('ignores extra properties on points, such as labels', () => {
-    const points = [{ ...kmNorth(1), label: 'Old Kent Road', words: 'filled.count.soap' }];
+    const points = [{ ...kmNorth(1), label: 'Old Kent Road', key: '51.464600,-2.589400' }];
     assert.deepEqual(plan({ ...base, points }).order, [0]);
   });
 
