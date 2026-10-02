@@ -2,6 +2,7 @@ import { describeRoute, formatDuration, mapRoute, progress, toggleDone } from '.
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
+import { SPEED_PRESETS, SPEED_RANGE, speedPreset } from './settings.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -22,6 +23,12 @@ const locationMatchesList = /** @type {HTMLUListElement} */ (document.getElement
 const planButton = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
 const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('[role="tab"][data-view]')]);
 const mapContainer = /** @type {HTMLDivElement} */ (document.getElementById('map'));
+const settingsButton = /** @type {HTMLButtonElement} */ (document.getElementById('settings-button'));
+const settingsDialog = /** @type {HTMLDialogElement} */ (document.getElementById('settings-dialog'));
+const speedPresets = /** @type {HTMLDivElement} */ (document.getElementById('speed-presets'));
+const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('settings-speed'));
+const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
+const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
 const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-status'));
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
@@ -407,7 +414,8 @@ async function replanFrom(position) {
   showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
 }
 
-replanButton.addEventListener('click', () => {
+/** Re-plans from the team's current position and the current time, as Re-plan from here does. */
+function requestReplan() {
   // Use the watched position if it's recent, rather than waiting for a new one.
   if (latestPosition && Date.now() - latestPosition.time <= POSITION_MAX_AGE_MS) {
     replanFrom({ lat: latestPosition.lat, lng: latestPosition.lng });
@@ -427,7 +435,9 @@ replanButton.addEventListener('click', () => {
     },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 },
   );
-});
+}
+
+replanButton.addEventListener('click', requestReplan);
 
 /**
  * Shows a tab of the Route section and remembers the choice.
@@ -545,6 +555,59 @@ for (const tab of tabs) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   planRoute(null);
+});
+
+/**
+ * Shows a walking speed in the settings panel: the slider, its value and
+ * which preset (if any) it matches.
+ *
+ * @param {number} speedKmh The walking speed in km/h.
+ */
+function showSettingsSpeed(speedKmh) {
+  speedSlider.value = String(speedKmh);
+  const preset = speedPreset(speedKmh);
+  speedValue.textContent = `${speedKmh.toFixed(1)} km/h`;
+  for (const button of speedPresets.querySelectorAll('button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.preset === preset?.name));
+  }
+}
+
+speedSlider.min = String(SPEED_RANGE.min);
+speedSlider.max = String(SPEED_RANGE.max);
+speedSlider.step = String(SPEED_RANGE.step);
+speedPresets.replaceChildren(
+  ...SPEED_PRESETS.map(({ name, speedKmh }) => {
+    const button = element(
+      'button',
+      'flex min-h-11 flex-col items-center justify-center rounded-md px-2 py-1 text-sm font-semibold text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft aria-pressed:bg-accent aria-pressed:text-white aria-pressed:ring-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+      name,
+    );
+    button.type = 'button';
+    button.dataset.preset = name;
+    button.append(element('span', 'text-xs font-normal', `${speedKmh} km/h`));
+    button.addEventListener('click', () => showSettingsSpeed(speedKmh));
+    return button;
+  }),
+);
+speedSlider.addEventListener('input', () => showSettingsSpeed(Number(speedSlider.value)));
+
+settingsButton.addEventListener('click', () => {
+  showSettingsSpeed(state.settings.speedKmh);
+  settingsSave.textContent = state.plan?.settings ? 'Save and re-plan' : 'Save';
+  settingsDialog.showModal();
+});
+
+settingsDialog.addEventListener('close', () => {
+  if (settingsDialog.returnValue !== 'save') {
+    return;
+  }
+  state.settings.speedKmh = Number(speedSlider.value);
+  saveState(state);
+  fillForm();
+  // Re-plan with the new settings, keeping ticks, if there's a route to change.
+  if (state.plan?.settings) {
+    requestReplan();
+  }
 });
 
 fillForm();
