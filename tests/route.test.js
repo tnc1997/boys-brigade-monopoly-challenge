@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { describeRoute, directionsUrl, formatDuration, progress, toggleDone } from '../route.js';
+import { describeRoute, directionsUrl, formatDuration, mapRoute, progress, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -114,5 +114,60 @@ describe('progress', () => {
 
   test('ignores keys of locations that are not in the plan', () => {
     assert.deepEqual(progress(savedPlan(), ['0.000000,0.000000']), { done: 0, total: 2 });
+  });
+});
+
+describe('mapRoute', () => {
+  const formatTime = (time) => new Date(time).toISOString().slice(11, 16);
+
+  test('marks the start and numbers the stops in visiting order, like the list', () => {
+    const plan = savedPlan();
+    const { markers, path } = mapRoute(plan, [], formatTime);
+    const { stops } = describeRoute(plan);
+    assert.equal(markers[0].kind, 'start');
+    assert.deepEqual(
+      markers.filter(({ kind }) => kind === 'stop').map(({ label, location }) => [label, location.label]),
+      stops.map(({ number, location }) => [String(number), location.label]),
+    );
+    assert.deepEqual(path, [plan.start, ...stops.map(({ location }) => location)]);
+  });
+
+  test('describes each marker for its tooltip', () => {
+    const { markers } = mapRoute(savedPlan(), [], formatTime);
+    assert.equal(markers[0].title, 'Start: Castle Park');
+    assert.match(markers[1].title, /^1\. .+, ETA \d\d:\d\d$/);
+  });
+
+  test('marks done stops differently, including done locations that are not on the route', () => {
+    const plan = savedPlan();
+    const [first] = describeRoute(plan).stops;
+    const { markers } = mapRoute(plan, [first.location.key], formatTime);
+    const done = markers.filter(({ kind }) => kind === 'done');
+    assert.equal(done.length, 1);
+    assert.match(done[0].title, /selfie done$/);
+
+    const replanned = planFromSetup({
+      setup: { ...defaultState().setup, locationsText: 'Old Kent Road 51.4545,-2.5879\nTemple Meads 51.4492,-2.5813' },
+      settings: defaultState().settings,
+      now,
+      doneKeys: [first.location.key],
+    }).plan;
+    const offRoute = mapRoute(replanned, [first.location.key], formatTime).markers.filter(({ kind }) => kind === 'done');
+    assert.deepEqual(offRoute.map(({ label }) => label), ['✓']);
+  });
+
+  test('only marks the finish when there is one, and ends the line there', () => {
+    assert.equal(mapRoute(savedPlan(), [], formatTime).markers.some(({ kind }) => kind === 'finish'), false);
+    const plan = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
+    const { markers, path } = mapRoute(plan, [], formatTime);
+    assert.equal(markers.filter(({ kind }) => kind === 'finish').length, 1);
+    assert.equal(path.at(-1), plan.finish);
+  });
+
+  test('includes skipped locations, but not in the line', () => {
+    const plan = savedPlan({ startTimeText: '15:40' });
+    const { markers, path } = mapRoute(plan, [], formatTime);
+    assert.deepEqual(markers.filter(({ kind }) => kind === 'skipped').map(({ location }) => location.label), ['Old Kent Road', 'Temple Meads']);
+    assert.deepEqual(path, [plan.start]);
   });
 });

@@ -114,3 +114,51 @@ export function progress(plan, doneKeys) {
   const done = new Set(doneKeys);
   return { done: plan.points.filter(({ key }) => done.has(key)).length, total: plan.points.length };
 }
+
+/**
+ * Describes a saved plan as a line and markers to draw on the map. Stops are
+ * numbered in visiting order, as in the list. Done locations that aren't on
+ * the route are marked as done, and skipped locations are included so they
+ * can be greyed out.
+ *
+ * @param {import('./setup.js').SavedPlan} plan The plan.
+ * @param {string[]} doneKeys Keys of the locations whose selfie has been taken.
+ * @param {(time: number) => string} formatTime Formats a time for the marker descriptions.
+ * @returns {{ path: import('./planner.js').LatLng[], markers: import('./map.js').MapMarker[] }} The line and the markers.
+ */
+export function mapRoute(plan, doneKeys, formatTime) {
+  const route = describeRoute(plan);
+  const done = new Set(doneKeys);
+  const routeKeys = new Set(route.stops.map(({ location }) => location.key));
+
+  /** @type {import('./map.js').MapMarker[]} */
+  const markers = [{ kind: 'start', location: plan.start, label: 'S', title: `Start: ${plan.start.label}` }];
+  for (const { number, location, arrivalTime } of route.stops) {
+    const isDone = done.has(location.key);
+    markers.push({
+      kind: isDone ? 'done' : 'stop',
+      location,
+      label: String(number),
+      title: `${number}. ${location.label}, ETA ${formatTime(arrivalTime)}${isDone ? ', selfie done' : ''}`,
+    });
+  }
+  for (const location of plan.points) {
+    if (done.has(location.key) && !routeKeys.has(location.key)) {
+      markers.push({ kind: 'done', location, label: '✓', title: `${location.label}, selfie done` });
+    }
+  }
+  if (route.finish) {
+    markers.push({
+      kind: 'finish',
+      location: route.finish.location,
+      label: '🏁',
+      title: `Finish: ${route.finish.location.label}, arrive ${formatTime(route.finish.arrivalTime)}`,
+    });
+  }
+  for (const location of route.skipped) {
+    markers.push({ kind: 'skipped', location, label: '', title: `${location.label}, skipped: not enough time` });
+  }
+
+  const path = [plan.start, ...route.stops.map(({ location }) => location), ...(route.finish ? [route.finish.location] : [])];
+  return { path, markers };
+}
