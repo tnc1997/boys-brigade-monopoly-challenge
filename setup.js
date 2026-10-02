@@ -22,6 +22,16 @@ import { plan } from './planner.js';
  * @property {SavedPlan | null} plan The plan, or `null` if the form has a problem that stops planning.
  * @property {string | null} error What stops planning, or `null` if a plan was made.
  * @property {import('./locations.js').ParsedLocationLine[]} invalidLines Lines of the location list that couldn't be used. They don't stop planning.
+ * @property {SearchMatch[]} matches What each looked-up address or place name matched, so the team can check them.
+ */
+
+/**
+ * What a looked-up address or place name matched.
+ *
+ * @typedef {object} SearchMatch
+ * @property {string} source Where it was typed, like `Line 3`, `Start` or `Finish`.
+ * @property {string} label The location's label.
+ * @property {string} matchedName The name of the place that was found.
  */
 
 /**
@@ -58,13 +68,23 @@ export function timeToday(time, now) {
  * @param {import('./storage.js').Settings} options.settings Settings for planning.
  * @param {number} options.now The current time, in milliseconds since the Unix epoch.
  * @param {string[]} [options.doneKeys=[]] Keys of the locations whose selfie has been taken.
+ * @param {import('./search.js').SearchResults} [options.searchResults={}] Search results for addresses and place names, by `searchKey`.
  * @param {import('./planner.js').LatLng | null} [options.from=null] The team's current position, to re-plan from.
  * @returns {SetupResult} The plan, or what stops planning, and any unusable lines.
  */
-export function planFromSetup({ setup, settings, now, doneKeys = [], from = null }) {
-  const lines = parseLocations(setup.locationsText);
+export function planFromSetup({ setup, settings, now, doneKeys = [], from = null, searchResults = {} }) {
+  const lines = parseLocations(setup.locationsText, { searchResults });
   const invalidLines = lines.filter(({ result }) => !result.isValid);
-  const failure = (error) => ({ plan: null, error, invalidLines });
+  /** @type {SearchMatch[]} */
+  const matches = lines
+    .filter(({ result }) => result.isValid && result.location.matchedName)
+    .map(({ lineNumber, result }) => ({ source: `Line ${lineNumber}`, label: result.location.label, matchedName: result.location.matchedName }));
+  const addMatch = (source, parsed) => {
+    if (parsed?.isValid && parsed.location.matchedName) {
+      matches.push({ source, label: parsed.location.label, matchedName: parsed.location.matchedName });
+    }
+  };
+  const failure = (error) => ({ plan: null, error, invalidLines, matches });
 
   const points = lines.filter(({ result }) => result.isValid).map(({ result }) => result.location);
   if (points.length === 0) {
@@ -73,11 +93,13 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
 
   const start = from
     ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', words: null, key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
-    : parseLocation(setup.startText);
+    : parseLocation(setup.startText, { searchResults });
+  addMatch('Start', from ? null : start);
   if (!start.isValid) {
     return failure(`Start: ${start.error}`);
   }
-  const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText);
+  const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText, { searchResults });
+  addMatch('Finish', finish);
   if (finish && !finish.isValid) {
     return failure(`Finish: ${finish.error}`);
   }
@@ -134,5 +156,26 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
     },
     error: null,
     invalidLines,
+    matches,
   };
+}
+
+/**
+ * Lists the addresses and place names in the setup form that still need
+ * looking up: lines of the location list, the Start field (unless
+ * re-planning from the team's position) and the Finish field.
+ *
+ * @param {object} options The setup form.
+ * @param {import('./storage.js').Setup} options.setup What was entered in the setup form.
+ * @param {import('./search.js').SearchResults} [options.searchResults={}] Search results already known, by `searchKey`.
+ * @param {boolean} [options.isFromPosition=false] Whether the route starts from the team's position, so the Start field isn't used.
+ * @returns {string[]} The addresses and place names to look up.
+ */
+export function searchesNeeded({ setup, searchResults = {}, isFromPosition = false }) {
+  const parsed = [
+    ...parseLocations(setup.locationsText, { searchResults }).map(({ result }) => result),
+    ...(isFromPosition ? [] : [parseLocation(setup.startText, { searchResults })]),
+    ...(setup.finishText.trim() === '' ? [] : [parseLocation(setup.finishText, { searchResults })]),
+  ];
+  return parsed.filter((result) => !result.isValid && result.query).map((result) => result.query);
 }
