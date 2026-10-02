@@ -29,6 +29,9 @@ const speedPresets = /** @type {HTMLDivElement} */ (document.getElementById('spe
 const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('settings-speed'));
 const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
 const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
+
+/** The settings panel's other fields, bound to `state.settings` or `state.setup` by their data attributes. */
+const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
 const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-status'));
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
@@ -594,6 +597,14 @@ speedSlider.addEventListener('input', () => showSettingsSpeed(Number(speedSlider
 settingsButton.addEventListener('click', () => {
   // The setup form's speed field can be empty, which saves NaN.
   showSettingsSpeed(Number.isFinite(state.settings.speedKmh) ? state.settings.speedKmh : defaultState().settings.speedKmh);
+  for (const field of panelFields) {
+    if (field.dataset.panelSetup) {
+      field.value = state.setup[field.dataset.panelSetup];
+    } else {
+      const value = state.settings[field.dataset.panelSetting];
+      field.value = field.dataset.scale ? String(value / Number(field.dataset.scale)) : String(value);
+    }
+  }
   settingsSave.textContent = state.plan?.settings ? 'Save and re-plan' : 'Save';
   settingsDialog.showModal();
 });
@@ -603,6 +614,17 @@ settingsDialog.addEventListener('close', () => {
     return;
   }
   state.settings.speedKmh = Number(speedSlider.value);
+  // The fields are required and range-checked, so the dialog only closes
+  // with "save" when they're valid.
+  for (const field of panelFields) {
+    if (field.dataset.panelSetup) {
+      state.setup[field.dataset.panelSetup] = field.value;
+    } else if (field.type === 'number') {
+      state.settings[field.dataset.panelSetting] = Number(field.value) * Number(field.dataset.scale ?? 1);
+    } else {
+      state.settings[field.dataset.panelSetting] = field.value;
+    }
+  }
   saveState(state);
   fillForm();
   // Re-plan with the new settings, keeping ticks, if there's a route to change.
