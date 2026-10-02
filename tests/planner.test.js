@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { evaluateRoute, greedyInsertion, haversineMetres, walkSeconds } from '../planner.js';
+import { evaluateRoute, greedyInsertion, haversineMetres, plan, walkSeconds } from '../planner.js';
 
 const castlePark = { lat: 51.4556, lng: -2.5894 };
 const cliftonSuspensionBridge = { lat: 51.4549, lng: -2.6278 };
@@ -237,5 +237,82 @@ describe('greedyInsertion', () => {
         assert.ok(evaluateRoute({ ...options, stops }).isWithinBudget, `run ${run} is over budget`);
       }
     }
+  });
+});
+
+describe('plan', () => {
+  // Points walked at 3.6 km/h (1 m/s) with no detour, so each kilometre takes
+  // exactly 1000 s.
+  const kmNorth = (km) => ({ lat: castlePark.lat + (km * 1000) / 111195, lng: castlePark.lng });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const base = {
+    start: castlePark,
+    startTime,
+    deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 100,
+    safetyMarginSeconds: 600,
+  };
+  const withDeadlineAfter = (seconds) => ({ ...base, deadline: startTime + (seconds + base.safetyMarginSeconds) * 1000 });
+  const finishes = [
+    ['without a finish', null],
+    ['with a finish', castlePark],
+  ];
+
+  for (const [name, finish] of finishes) {
+    describe(name, () => {
+      test('visits every point when there is plenty of time', () => {
+        const points = [kmNorth(2), kmNorth(1)];
+        const result = plan({ ...base, points, finish });
+        // With a finish back at the start, either direction along the line
+        // takes the same time.
+        assert.deepEqual([...result.order].sort(), [0, 1]);
+        assert.deepEqual(result.skipped, []);
+      });
+
+      test('stays within the time budget', () => {
+        const points = [kmNorth(1), kmNorth(2), kmNorth(3), kmNorth(4)];
+        const options = { ...withDeadlineAfter(4500), points, finish };
+        const result = plan(options);
+        assert.ok(result.spareSeconds >= 0);
+        assert.ok(result.endEta <= options.deadline - options.safetyMarginSeconds * 1000);
+      });
+
+      test('skips points when time is short', () => {
+        const points = [kmNorth(1), kmNorth(2), kmNorth(3), kmNorth(4)];
+        const result = plan({ ...withDeadlineAfter(2500), points, finish });
+        assert.ok(result.skipped.length > 0);
+        assert.deepEqual([...result.order, ...result.skipped].sort(), [0, 1, 2, 3]);
+        assert.deepEqual(result.skipped, [...result.skipped].sort());
+      });
+
+      test('matches the timings from evaluateRoute', () => {
+        const points = [kmNorth(1), kmNorth(2)];
+        const options = { ...base, points, finish };
+        const result = plan(options);
+        const timeline = evaluateRoute({ ...options, stops: result.order.map((index) => points[index]) });
+        assert.deepEqual(result.arrivalTimes, timeline.arrivalTimes);
+        assert.equal(result.endEta, timeline.endEta);
+        assert.equal(result.spareSeconds, timeline.spareSeconds);
+      });
+
+      test('skips every point when the deadline has passed', () => {
+        const points = [kmNorth(1), kmNorth(2)];
+        const result = plan({ ...base, points, finish, deadline: startTime - 1000 });
+        assert.deepEqual(result.order, []);
+        assert.deepEqual(result.arrivalTimes, []);
+        assert.deepEqual(result.skipped, [0, 1]);
+      });
+    });
+  }
+
+  test('ignores extra properties on points, such as labels', () => {
+    const points = [{ ...kmNorth(1), label: 'Old Kent Road', words: 'filled.count.soap' }];
+    assert.deepEqual(plan({ ...base, points }).order, [0]);
+  });
+
+  test('rejects invalid walking settings', () => {
+    assert.throws(() => plan({ ...base, points: [kmNorth(1)], speedKmh: 0 }), RangeError);
   });
 });
