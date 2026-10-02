@@ -101,12 +101,16 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
   // Skipped locations go underneath, so they don't hide the route.
   const ordered = [...markers.filter(({ kind }) => kind === 'skipped'), ...markers.filter(({ kind }) => kind !== 'skipped')];
   for (const { kind, location, label, title } of ordered) {
-    const size = kind === 'skipped' ? 22 : 30;
+    // Each marker can be tapped anywhere in a 44 px square, larger than the
+    // circle that's drawn, so it's easy to hit without crowding the map.
+    const target = document.createElement('span');
+    target.className = 'flex size-full items-center justify-center';
     const icon = document.createElement('span');
-    icon.className = `flex size-full items-center justify-center rounded-full text-xs font-bold shadow ring-2 ring-surface ${MARKER_CLASSES[kind]}`;
+    icon.className = `flex ${kind === 'skipped' ? 'size-5' : 'size-8'} items-center justify-center rounded-full text-xs font-bold shadow ring-2 ring-surface ${MARKER_CLASSES[kind]}`;
     icon.textContent = label;
+    target.append(icon);
     const marker = L.marker([location.lat, location.lng], {
-      icon: L.divIcon({ html: icon, className: '', iconSize: [size, size] }),
+      icon: L.divIcon({ html: target, className: '', iconSize: [44, 44] }),
       title,
       alt: title,
       keyboard: true,
