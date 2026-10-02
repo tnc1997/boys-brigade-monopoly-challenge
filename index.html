@@ -19,7 +19,58 @@
     <main class="mx-auto flex max-w-xl flex-col gap-4 px-4 py-4">
       <section id="setup" aria-labelledby="setup-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
         <h2 id="setup-heading" class="text-base font-semibold">Setup</h2>
-        <div id="setup-form" class="mt-3"></div>
+        <form id="setup-form" class="mt-3 flex flex-col gap-4" novalidate>
+          <div class="flex flex-col gap-1">
+            <label for="locations" class="text-sm font-medium">Locations</label>
+            <p id="locations-hint" class="text-xs text-slate-600">
+              One per line, each with its coordinates (like <code>51.4545,-2.5879</code>) or a full Google Maps link, plus an optional what3words address and label.
+              To get coordinates on a phone, drop a pin in Google Maps and copy the numbers it shows.
+            </p>
+            <textarea id="locations" data-setup="locationsText" rows="8" aria-describedby="locations-hint" spellcheck="false" autocapitalize="off"
+              placeholder="Old Kent Road ///filled.count.soap 51.4545,-2.5879"
+              class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"></textarea>
+            <ul id="location-errors" class="flex flex-col gap-1 text-sm text-red-700" aria-live="polite"></ul>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="flex flex-col gap-1">
+              <label for="start" class="text-sm font-medium">Start</label>
+              <input id="start" data-setup="startText" type="text" autocapitalize="off" spellcheck="false"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="finish" class="text-sm font-medium">Finish <span class="font-normal text-slate-600">(optional)</span></label>
+              <input id="finish" data-setup="finishText" type="text" autocapitalize="off" spellcheck="false" placeholder="Leave blank if there's no finish"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="start-time" class="text-sm font-medium">Start time <span class="font-normal text-slate-600">(blank for now)</span></label>
+              <input id="start-time" data-setup="startTimeText" type="time"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="deadline" class="text-sm font-medium">Deadline</label>
+              <input id="deadline" data-setting="deadline" type="time"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="speed" class="text-sm font-medium">Walking speed <span class="font-normal text-slate-600">(km/h)</span></label>
+              <input id="speed" data-setting="speedKmh" data-number type="number" inputmode="decimal" min="1" max="8" step="0.1"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+            <div class="flex flex-col gap-1">
+              <label for="selfie-time" class="text-sm font-medium">Selfie time <span class="font-normal text-slate-600">(minutes per stop)</span></label>
+              <input id="selfie-time" data-setting="dwellSeconds" data-number data-scale="60" type="number" inputmode="decimal" min="0" max="30" step="0.5"
+                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+            </div>
+          </div>
+
+          <p id="setup-error" class="hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-red-200" role="alert"></p>
+
+          <button type="submit" class="min-h-11 rounded-md bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2">
+            Plan route
+          </button>
+        </form>
       </section>
 
       <section id="stops" aria-labelledby="stops-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
