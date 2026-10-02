@@ -19,6 +19,7 @@
   --color-danger: var(--theme-danger);
   --color-danger-soft: var(--theme-danger-soft);
   --color-danger-line: var(--theme-danger-line);
+  --color-position: var(--theme-position);
 }
 
 :root {
@@ -36,6 +37,7 @@
   --theme-danger: var(--color-red-700);
   --theme-danger-soft: var(--color-red-50);
   --theme-danger-line: var(--color-red-200);
+  --theme-position: var(--color-sky-600);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,5 +56,6 @@
     --theme-danger: var(--color-red-400);
     --theme-danger-soft: var(--color-red-950);
     --theme-danger-line: var(--color-red-900);
+    --theme-position: var(--color-sky-400);
   }
 }

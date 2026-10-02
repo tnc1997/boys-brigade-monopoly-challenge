@@ -24,6 +24,7 @@ export const BRISTOL_BOUNDS = [
  * @typedef {object} RouteMap
  * @property {import('leaflet').Map} map The Leaflet map.
  * @property {import('leaflet').LayerGroup} routeLayer The layer the route is drawn on.
+ * @property {import('leaflet').LayerGroup} positionLayer The layer the team's position is drawn on.
  * @property {() => void} refresh Updates the map's size after its container has been shown or resized.
  */
 
@@ -62,7 +63,11 @@ export function createMap(container) {
   L.tileLayer(TILE_URL, { maxZoom: 19, attribution: TILE_ATTRIBUTION }).addTo(map);
   map.fitBounds(BRISTOL_BOUNDS);
   const routeLayer = L.layerGroup().addTo(map);
-  return { map, routeLayer, refresh: () => map.invalidateSize() };
+  // The team's position goes in its own pane above the markers (600), so a
+  // stop's marker never hides it.
+  map.createPane('position').style.zIndex = '650';
+  const positionLayer = L.layerGroup().addTo(map);
+  return { map, routeLayer, positionLayer, refresh: () => map.invalidateSize() };
 }
 
 /**
@@ -116,4 +121,33 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
       { padding: [24, 24], maxZoom: 16 },
     );
   }
+}
+
+/**
+ * The team's position from the browser.
+ *
+ * @typedef {object} Position
+ * @property {number} lat Latitude.
+ * @property {number} lng Longitude.
+ * @property {number} accuracy How far off the position might be, in metres.
+ * @property {number} time When the position was found, in milliseconds since the Unix epoch.
+ */
+
+/**
+ * Shows the team's position as a dot, with a circle showing how accurate it
+ * is. Anything drawn before is replaced.
+ *
+ * @param {RouteMap} routeMap The map.
+ * @param {Position | null} position The position, or `null` to remove it.
+ */
+export function showPosition({ positionLayer }, position) {
+  const { L } = globalThis;
+  positionLayer.clearLayers();
+  if (!position) {
+    return;
+  }
+  const centre = [position.lat, position.lng];
+  const options = { pane: 'position', interactive: false };
+  L.circle(centre, { ...options, radius: position.accuracy, className: 'fill-position stroke-position', weight: 1, fillOpacity: 0.15 }).addTo(positionLayer);
+  L.circleMarker(centre, { ...options, radius: 7, className: 'fill-position stroke-surface', weight: 3, fillOpacity: 1 }).addTo(positionLayer);
 }
