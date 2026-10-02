@@ -49,6 +49,14 @@ describe('planFromSetup', () => {
     assert.equal(plan.finish.label, 'Finish');
   });
 
+  test('returns every line with its result', () => {
+    const { lines } = planFromSetup(setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\n\nNowhere' }));
+    assert.deepEqual(lines.map(({ lineNumber, result }) => [lineNumber, result.isValid]), [
+      [1, true],
+      [3, false],
+    ]);
+  });
+
   test('returns invalid lines without stopping the rest', () => {
     const { plan, invalidLines } = planFromSetup(setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\nWhitechapel ///filled.count.soap\nNowhere' }));
     assert.equal(plan.points.length, 1);
