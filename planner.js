@@ -60,3 +60,80 @@ export function walkSeconds(a, b, { speedKmh = 4.5, detourFactor = 1.3 } = {}) {
   const metresPerSecond = (speedKmh * 1000) / 3600;
   return (haversineMetres(a, b) * detourFactor) / metresPerSecond;
 }
+
+/**
+ * Options for timing a route.
+ *
+ * @typedef {object} RouteOptions
+ * @property {LatLng} start Where the team is at `startTime`.
+ * @property {LatLng[]} stops The locations to visit, in order.
+ * @property {LatLng | null} [finish=null] Where the team must end up, or `null` if there's no physical finish.
+ * @property {number} startTime When the route starts, in milliseconds since the Unix epoch (as from `Date.now()`).
+ * @property {number} deadline When the team must have finished, in milliseconds since the Unix epoch.
+ * @property {number} [speedKmh=4.5] Walking speed of the whole group in km/h.
+ * @property {number} [detourFactor=1.3] How much longer the walk along streets is than the straight line.
+ * @property {number} [dwellSeconds=180] Time spent at each stop taking the selfie, in seconds.
+ * @property {number} [safetyMarginSeconds=900] Spare time to keep before the deadline, in seconds.
+ */
+
+/**
+ * The timings of a route.
+ *
+ * @typedef {object} RouteTimeline
+ * @property {number[]} arrivalTimes When the team arrives at each stop, in milliseconds since the Unix epoch, in the same order as `stops`.
+ * @property {number} endEta When the route ends, in milliseconds since the Unix epoch. With a finish, this is the arrival time at the finish. Without one, it's when the last selfie is taken (or `startTime` if there are no stops).
+ * @property {number} spareSeconds Time left between `endEta` and the deadline minus the safety margin. Negative when the route doesn't fit.
+ * @property {boolean} fitsBudget Whether the route ends no later than the deadline minus the safety margin.
+ */
+
+/**
+ * Works out when the team reaches each stop on a route, when the route ends
+ * and whether it ends in time. Each stop takes the walk to it plus the selfie
+ * time there.
+ *
+ * @param {RouteOptions} options The route and the settings to time it with.
+ * @returns {RouteTimeline} The arrival times, end ETA and whether the route fits the time budget.
+ * @example
+ * const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+ * evaluateRoute({
+ *   start: { lat: 51.4556, lng: -2.5894 },
+ *   stops: [{ lat: 51.4492, lng: -2.5813 }],
+ *   startTime,
+ *   deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+ * }).fitsBudget; // true
+ */
+export function evaluateRoute({
+  start,
+  stops,
+  finish = null,
+  startTime,
+  deadline,
+  speedKmh = 4.5,
+  detourFactor = 1.3,
+  dwellSeconds = 180,
+  safetyMarginSeconds = 900,
+}) {
+  const walkOptions = { speedKmh, detourFactor };
+  const arrivalTimes = [];
+  let position = start;
+  let time = startTime;
+
+  for (const [index, stop] of stops.entries()) {
+    if (index > 0) {
+      time += dwellSeconds * 1000;
+    }
+    time += walkSeconds(position, stop, walkOptions) * 1000;
+    arrivalTimes.push(time);
+    position = stop;
+  }
+
+  if (stops.length > 0) {
+    time += dwellSeconds * 1000;
+  }
+  if (finish) {
+    time += walkSeconds(position, finish, walkOptions) * 1000;
+  }
+
+  const spareSeconds = (deadline - safetyMarginSeconds * 1000 - time) / 1000;
+  return { arrivalTimes, endEta: time, spareSeconds, fitsBudget: spareSeconds >= 0 };
+}
