@@ -217,3 +217,24 @@ export function timeWarning(plan, doneKeys, now) {
   }
   return { message, minutesLeft, minutesBehind };
 }
+
+/**
+ * Describes the time left until the deadline, for the countdown in the header.
+ *
+ * @param {number | null} deadline The deadline in milliseconds since the Unix epoch, or `null` if it isn't set.
+ * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @returns {string} The time left, like `3 h 12 min left`, or a message once the deadline has passed or if it isn't set.
+ * @example
+ * countdownText(Date.parse('2026-10-03T16:00:00'), Date.parse('2026-10-03T12:48:00')); // '3 h 12 min left'
+ */
+export function countdownText(deadline, now) {
+  if (deadline === null || !Number.isFinite(deadline)) {
+    return 'No deadline set';
+  }
+  const leftSeconds = (deadline - now) / 1000;
+  if (leftSeconds <= 0) {
+    return 'Deadline passed';
+  }
+  // Round up, so the countdown doesn't show "under 1 min" while a minute is left.
+  return `${formatDuration(Math.ceil(leftSeconds / 60) * 60)} left`;
+}

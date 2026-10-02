@@ -1,9 +1,9 @@
-import { describeRoute, formatDuration, mapRoute, progress, timeWarning, toggleDone } from './route.js';
+import { countdownText, describeRoute, formatDuration, mapRoute, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
-import { planFromSetup, searchesNeeded } from './setup.js';
+import { planFromSetup, searchesNeeded, timeToday } from './setup.js';
 import { defaultState, loadState, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
@@ -32,6 +32,8 @@ const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('
 const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
 const timeWarningBanner = /** @type {HTMLDivElement} */ (document.getElementById('time-warning'));
 const timeWarningText = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-text'));
+const countdown = /** @type {HTMLSpanElement} */ (document.getElementById('countdown'));
+const countdownDeadline = /** @type {HTMLSpanElement} */ (document.getElementById('countdown-deadline'));
 
 /** The settings panel's other fields, bound to `state.settings` or `state.setup` by their data attributes. */
 const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
@@ -101,6 +103,7 @@ function saveField(field) {
   }
   saveState(state);
   showSettingsSummary();
+  showCountdown();
 }
 
 /**
@@ -239,6 +242,20 @@ function stopItem(stop, isFinish) {
   details.append(title, timing, links);
   item.append(badge, details);
   return item;
+}
+
+/** Shows the time left until today's deadline in the header. */
+function showCountdown() {
+  const now = Date.now();
+  const deadline = timeToday(state.settings.deadline ?? '', now);
+  countdown.textContent = countdownText(deadline, now);
+  countdownDeadline.textContent = deadline === null ? '' : `Deadline ${timeFormat.format(deadline)}`;
+}
+
+/** Updates everything that depends on the time: the countdown and the time warning. */
+function showTime() {
+  showCountdown();
+  showTimeWarning();
 }
 
 /**
@@ -661,6 +678,7 @@ settingsDialog.addEventListener('close', () => {
   saveState(state);
   fillForm();
   showSettingsSummary();
+  showCountdown();
   // Re-plan with the new settings, keeping ticks, if there's a route to change.
   if (state.plan?.settings) {
     requestReplan();
@@ -669,14 +687,15 @@ settingsDialog.addEventListener('close', () => {
 
 // Recheck the time warning every minute, and when the team comes back to
 // the app, since timers can be paused while the phone is locked.
-setInterval(showTimeWarning, 60000);
+setInterval(showTime, 60000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    showTimeWarning();
+    showTime();
   }
 });
 
 fillForm();
+showCountdown();
 showSettingsSummary();
 previewLines();
 showView(state.view);
