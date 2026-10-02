@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { planFromSetup, timeToday } from '../setup.js';
+import { planFromSetup, searchesNeeded, timeToday } from '../setup.js';
 import { defaultState } from '../storage.js';
 
 const now = new Date(2026, 9, 3, 11, 0).getTime();
@@ -111,4 +111,49 @@ describe('planFromSetup', () => {
       assert.match(result.error, error);
     });
   }
+});
+
+describe('planFromSetup with addresses and place names', () => {
+  const searchResults = {
+    'queen square, bristol': { isFound: true, lat: 51.4504, lng: -2.5947, name: 'Queen Square, City Centre, Bristol' },
+    'temple meads': { isFound: true, lat: 51.4492, lng: -2.5813, name: 'Bristol Temple Meads' },
+  };
+
+  test('plans looked-up locations and says what each matched', () => {
+    const { plan, matches, invalidLines } = planFromSetup({
+      ...setupWith({ locationsText: 'Old Kent Road 51.4545,-2.5879\n///filled.count.soap Queen Square, Bristol', finishText: 'Temple Meads' }),
+      searchResults,
+    });
+    assert.deepEqual(invalidLines, []);
+    assert.equal(plan.points.length, 2);
+    assert.equal(plan.finish.lat, 51.4492);
+    assert.deepEqual(matches, [
+      { source: 'Line 2', label: 'Queen Square, Bristol', matchedName: 'Queen Square, City Centre, Bristol' },
+      { source: 'Finish', label: 'Temple Meads', matchedName: 'Bristol Temple Meads' },
+    ]);
+  });
+
+  test('looks up the start too', () => {
+    const { plan, matches } = planFromSetup({ ...setupWith({ startText: 'Queen Square, Bristol' }), searchResults });
+    assert.equal(plan.start.lat, 51.4504);
+    assert.deepEqual(matches.map(({ source }) => source), ['Start']);
+  });
+});
+
+describe('searchesNeeded', () => {
+  test('lists the lines, start and finish that need looking up', () => {
+    const setup = { ...defaultState().setup, locationsText: 'Old Kent Road 51.4545,-2.5879\nQueen Square, Bristol\n///filled.count.soap', startText: 'Temple Meads', finishText: 'Cabot Tower' };
+    assert.deepEqual(searchesNeeded({ setup }), ['Queen Square, Bristol', 'Temple Meads', 'Cabot Tower']);
+  });
+
+  test('leaves out searches that are already known', () => {
+    const setup = { ...defaultState().setup, locationsText: 'Queen Square, Bristol' };
+    const searchResults = { 'queen square, bristol': { isFound: false, error: 'No match', isTemporary: false } };
+    assert.deepEqual(searchesNeeded({ setup, searchResults }), []);
+  });
+
+  test('leaves out the start when re-planning from the team\'s position', () => {
+    const setup = { ...defaultState().setup, locationsText: '', startText: 'Temple Meads' };
+    assert.deepEqual(searchesNeeded({ setup, isFromPosition: true }), []);
+  });
 });

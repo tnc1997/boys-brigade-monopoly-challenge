@@ -1,3 +1,4 @@
+import { searchKey } from './search.js';
 import { parseWords } from './what3words.js';
 
 /**
@@ -9,12 +10,15 @@ import { parseWords } from './what3words.js';
  * @property {string} label What to call the location. Defaults to the place's name from a Google Maps URL, the what3words address, or the coordinates.
  * @property {string | null} words The what3words address as `word.word.word`, or `null` if the line didn't have one.
  * @property {string} key A stable key for the location, from its coordinates, for remembering which selfies are done.
+ * @property {string} [matchedName] For a location found by searching for an address or place name, the name of the place that was found, so the team can check it.
  */
 
 /**
  * The result of parsing a line of the location list.
  *
- * @typedef {{ isValid: true, location: Location } | { isValid: false, error: string, lookupUrl?: string }} ParsedLocation
+ * @typedef {{ isValid: true, location: Location } | { isValid: false, error: string, lookupUrl?: string, query?: string }} ParsedLocation
+ * `query` is the address or place name to look up when the line has no
+ * coordinates and its search result isn't known yet.
  */
 
 /**
@@ -117,19 +121,61 @@ export function parseGoogleMapsUrl(text) {
 }
 
 /**
+ * Turns the text of a line without coordinates into a location, using its
+ * search result if it has one.
+ *
+ * @param {string} text The line's text, apart from any what3words address.
+ * @param {string | null} wordsText The line's what3words address, if it has one.
+ * @param {import('./search.js').SearchResults} searchResults Search results by {@link searchKey}.
+ * @returns {ParsedLocation} The location, or a message saying what's wrong with the text to look up.
+ */
+function searchedLocation(text, wordsText, searchResults) {
+  const colon = text.indexOf(':');
+  const label = colon > 0 ? text.slice(0, colon).replace(SEPARATORS, '') : text;
+  const query = colon > 0 ? text.slice(colon + 1).replace(SEPARATORS, '') : text;
+  const lookupUrl = wordsText ? { lookupUrl: `https://what3words.com/${wordsText}` } : {};
+  const result = searchResults[searchKey(query)];
+
+  if (!result) {
+    return { isValid: false, error: `Press Plan route to look up "${query}", or add the coordinates.`, query, ...lookupUrl };
+  }
+  if (!result.isFound) {
+    return { isValid: false, error: result.error, ...lookupUrl };
+  }
+  return {
+    isValid: true,
+    location: {
+      lat: result.lat,
+      lng: result.lng,
+      label: label || query,
+      words: wordsText,
+      key: `${result.lat.toFixed(6)},${result.lng.toFixed(6)}`,
+      matchedName: result.name,
+    },
+  };
+}
+
+/**
  * Parses one line of the location list. The free what3words plan can't
  * convert addresses to coordinates, so a line must include the coordinates,
- * either as `lat,lng` or in a Google Maps URL. It can also include a
- * what3words address, kept so the stop can link to it, and a label (any
- * remaining text), in any order.
+ * either as `lat,lng` or in a Google Maps URL, or an address or place name
+ * to look up. It can also include a what3words address, kept so the stop can
+ * link to it, and a label (any remaining text), in any order.
+ *
+ * Without coordinates, the remaining text is looked up, and is also the
+ * label. To give a different label, put it before a colon, like
+ * `Old Kent Road: Queen Square, Bristol`. Until its search result is in
+ * `searchResults`, the line is invalid with the text to look up as `query`.
  *
  * @param {string} line The line as typed.
+ * @param {object} [options] Search results for lines without coordinates.
+ * @param {import('./search.js').SearchResults} [options.searchResults] Search results by {@link searchKey}.
  * @returns {ParsedLocation} The location, or a message saying what's wrong.
  * @example
  * parseLocation('Old Kent Road ///filled.count.soap 51.4545,-2.5879');
  * // { isValid: true, location: { lat: 51.4545, lng: -2.5879, label: 'Old Kent Road', words: 'filled.count.soap', key: '51.454500,-2.587900' } }
  */
-export function parseLocation(line) {
+export function parseLocation(line, { searchResults = {} } = {}) {
   // URLs are read and removed first, because they can contain text that
   // looks like coordinates or a what3words address (such as maps.google.com).
   /** @type {CoordinatesText[]} */
@@ -160,14 +206,18 @@ export function parseLocation(line) {
   const wordsText = parsedWords?.words ?? null;
 
   if (coordinates.length === 0) {
+    const text = words.reduce((remaining, match) => remaining.replace(match[0], ' '), rest).replace(/\s+/g, ' ').replace(SEPARATORS, '');
+    if (text) {
+      return searchedLocation(text, wordsText, searchResults);
+    }
     if (wordsText) {
       return {
         isValid: false,
-        error: `Add the coordinates for ///${wordsText} as lat,lng, like 51.4545,-2.5879. Open it in what3words to see where it is, then long-press the same spot in Google Maps to drop a pin, and copy the coordinates from the search box onto this line.`,
+        error: `Add an address or the coordinates for ///${wordsText}. Open it in what3words and tap Navigate to get its address, or long-press the same spot in Google Maps to drop a pin and copy the coordinates from the search box, then add it to this line.`,
         lookupUrl: `https://what3words.com/${wordsText}`,
       };
     }
-    return { isValid: false, error: 'Add the coordinates as lat,lng, like 51.4545,-2.5879, or a Google Maps link.' };
+    return { isValid: false, error: 'Add the coordinates as lat,lng, like 51.4545,-2.5879, a Google Maps link, or an address to look up.' };
   }
   if (coordinates.length > 1) {
     return { isValid: false, error: 'This line has more than one set of coordinates. Put each location on its own line.' };
@@ -204,12 +254,14 @@ export function parseLocation(line) {
  * Parses the location list, one location per line. Blank lines are ignored.
  *
  * @param {string} text The location list as typed.
+ * @param {object} [options] Search results for lines without coordinates.
+ * @param {import('./search.js').SearchResults} [options.searchResults] Search results by {@link searchKey}.
  * @returns {ParsedLocationLine[]} Each non-blank line with the result of parsing it, in order.
  */
-export function parseLocations(text) {
+export function parseLocations(text, { searchResults = {} } = {}) {
   return text
     .split(/\r?\n/)
     .map((line, index) => ({ lineNumber: index + 1, text: line }))
     .filter(({ text: line }) => line.trim() !== '')
-    .map((line) => ({ ...line, result: parseLocation(line.text) }));
+    .map((line) => ({ ...line, result: parseLocation(line.text, { searchResults }) }));
 }

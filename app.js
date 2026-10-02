@@ -1,5 +1,6 @@
 import { describeRoute, formatDuration, progress, toggleDone } from './route.js';
-import { planFromSetup } from './setup.js';
+import { searchPlaces } from './search.js';
+import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
@@ -12,6 +13,10 @@ const stopList = /** @type {HTMLDivElement} */ (document.getElementById('stop-li
 const replan = /** @type {HTMLDivElement} */ (document.getElementById('replan'));
 const replanButton = /** @type {HTMLButtonElement} */ (document.getElementById('replan-button'));
 const replanStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('replan-status'));
+const searchStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('search-status'));
+const locationMatches = /** @type {HTMLDivElement} */ (document.getElementById('location-matches'));
+const locationMatchesList = /** @type {HTMLUListElement} */ (document.getElementById('location-matches-list'));
+const planButton = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -246,21 +251,78 @@ form.addEventListener('input', (event) => {
 });
 
 /**
- * Plans the route from the setup form and shows it.
+ * Shows what each looked-up address or place name matched, or hides the list.
+ *
+ * @param {import('./setup.js').SearchMatch[]} matches The matches.
+ */
+function showMatches(matches) {
+  locationMatchesList.replaceChildren(
+    ...matches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
+  );
+  locationMatches.classList.toggle('hidden', matches.length === 0);
+  locationMatches.classList.toggle('flex', matches.length > 0);
+}
+
+/**
+ * Shows the progress of looking up addresses, or hides it.
+ *
+ * @param {string | null} message The message, or `null` to hide it.
+ */
+function showSearchStatus(message) {
+  searchStatus.textContent = message ?? '';
+  searchStatus.classList.toggle('hidden', message === null);
+}
+
+/**
+ * Looks up any addresses and place names in the setup form that aren't
+ * known yet. Results are saved unless the lookup failed for a reason that
+ * may pass, such as being offline.
+ *
+ * @param {boolean} isFromPosition Whether the route starts from the team's position, so the Start field isn't used.
+ * @returns {Promise<import('./search.js').SearchResults>} Every known result, including temporary failures from this lookup.
+ */
+async function lookUpAddresses(isFromPosition) {
+  const queries = searchesNeeded({ setup: state.setup, searchResults: state.searchResults, isFromPosition });
+  if (queries.length === 0) {
+    return state.searchResults;
+  }
+  showSearchStatus(`Looking up ${queries.length === 1 ? '1 address' : `${queries.length} addresses`}…`);
+  const results = await searchPlaces(queries, {
+    onProgress: (done, total) => showSearchStatus(`Looked up ${done} of ${total}…`),
+  });
+  showSearchStatus(null);
+  const saved = Object.fromEntries(Object.entries(results).filter(([, result]) => result.isFound || !result.isTemporary));
+  state.searchResults = { ...state.searchResults, ...saved };
+  saveState(state);
+  return { ...state.searchResults, ...results };
+}
+
+/**
+ * Looks up any new addresses, then plans the route from the setup form and
+ * shows it.
  *
  * @param {import('./planner.js').LatLng | null} from The team's current position to re-plan from, or `null` to start at the Start field.
- * @returns {string | null} What stopped planning, or `null` if a plan was made.
+ * @returns {Promise<string | null>} What stopped planning, or `null` if a plan was made.
  */
-function planRoute(from) {
-  const result = planFromSetup({ setup: state.setup, settings: state.settings, now: Date.now(), doneKeys: state.doneKeys, from });
-  showInvalidLines(result.invalidLines);
-  showSetupError(result.error);
-  if (result.plan) {
-    state.plan = result.plan;
-    saveState(state);
-    showPlan();
+async function planRoute(from) {
+  planButton.disabled = true;
+  replanButton.disabled = true;
+  try {
+    const searchResults = await lookUpAddresses(from !== null);
+    const result = planFromSetup({ setup: state.setup, settings: state.settings, now: Date.now(), doneKeys: state.doneKeys, from, searchResults });
+    showInvalidLines(result.invalidLines);
+    showMatches(result.matches);
+    showSetupError(result.error);
+    if (result.plan) {
+      state.plan = result.plan;
+      saveState(state);
+      showPlan();
+    }
+    return result.error;
+  } finally {
+    planButton.disabled = false;
+    replanButton.disabled = false;
   }
-  return result.error;
 }
 
 /** Messages for each way getting the position can fail, by `GeolocationPositionError.code`. */
@@ -290,9 +352,8 @@ replanButton.addEventListener('click', () => {
   replanButton.disabled = true;
   showReplanStatus('Getting your location…', false);
   navigator.geolocation.getCurrentPosition(
-    (position) => {
-      replanButton.disabled = false;
-      const error = planRoute({ lat: position.coords.latitude, lng: position.coords.longitude });
+    async (position) => {
+      const error = await planRoute({ lat: position.coords.latitude, lng: position.coords.longitude });
       showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
     },
     (error) => {

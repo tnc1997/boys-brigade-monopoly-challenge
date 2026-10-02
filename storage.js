@@ -27,6 +27,7 @@
  * @property {Settings} settings Settings for planning.
  * @property {Setup} setup What was entered in the setup form.
  * @property {string[]} doneKeys Keys of the locations whose selfie has been taken.
+ * @property {import('./search.js').SearchResults} searchResults Saved results of looking up addresses and place names, so each is only looked up once and re-planning works offline. Temporary failures aren't saved.
  * @property {import('./setup.js').SavedPlan | null} plan The current plan, or `null` if there isn't one yet.
  */
 
@@ -64,6 +65,7 @@ export function defaultState() {
       startTimeText: '',
     },
     doneKeys: [],
+    searchResults: {},
     plan: null,
   };
 }
@@ -112,6 +114,7 @@ export function loadState(storage = browserStorage()) {
     settings: { ...defaults.settings, ...(isObject(saved.settings) ? saved.settings : {}) },
     setup: { ...defaults.setup, ...(isObject(saved.setup) ? saved.setup : {}) },
     doneKeys: Array.isArray(saved.doneKeys) ? saved.doneKeys.filter((key) => typeof key === 'string') : [],
+    searchResults: isObject(saved.searchResults) ? saved.searchResults : {},
     plan: isObject(saved.plan) ? saved.plan : null,
   };
 }

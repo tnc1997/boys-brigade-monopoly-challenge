@@ -83,16 +83,17 @@ describe('parseLocation', () => {
   });
 
   test('asks for the coordinates when a line only has a what3words address', () => {
-    const result = parseLocation('Old Kent Road ///filled.count.soap');
+    const result = parseLocation('///filled.count.soap');
     assert.equal(result.isValid, false);
-    assert.match(result.error, /Add the coordinates for \/\/\/filled\.count\.soap/);
+    assert.match(result.error, /Add an address or the coordinates for \/\/\/filled\.count\.soap/);
     assert.equal(result.lookupUrl, 'https://what3words.com/filled.count.soap');
   });
 
-  test('asks for the coordinates when a line only has a label', () => {
+  test('asks to look up a line with text but no coordinates', () => {
     const result = parseLocation('Old Kent Road');
     assert.equal(result.isValid, false);
-    assert.match(result.error, /Add the coordinates/);
+    assert.equal(result.query, 'Old Kent Road');
+    assert.match(result.error, /Press Plan route to look up "Old Kent Road"/);
     assert.equal(result.lookupUrl, undefined);
   });
 
@@ -213,5 +214,61 @@ describe('parseLocation with Google Maps URLs', () => {
     const result = parseLocation('https://www.google.com/maps?q=51.4545,-2.5879 51.4600,-2.6000');
     assert.equal(result.isValid, false);
     assert.match(result.error, /more than one set of coordinates/);
+  });
+});
+
+describe('parseLocation with addresses and place names', () => {
+  const found = { isFound: true, lat: 51.4504, lng: -2.5947, name: 'Queen Square, City Centre, Bristol, England' };
+  const searchResults = { 'queen square, bristol': found };
+
+  test('looks up the text, keeping the what3words address', () => {
+    const result = parseLocation('///filled.count.soap Queen Square, Bristol');
+    assert.equal(result.query, 'Queen Square, Bristol');
+    assert.equal(result.lookupUrl, 'https://what3words.com/filled.count.soap');
+  });
+
+  test('uses the search result once it is known', () => {
+    assert.deepEqual(parseLocation('///filled.count.soap Queen Square, Bristol', { searchResults }).location, {
+      lat: 51.4504,
+      lng: -2.5947,
+      label: 'Queen Square, Bristol',
+      words: 'filled.count.soap',
+      key: '51.450400,-2.594700',
+      matchedName: 'Queen Square, City Centre, Bristol, England',
+    });
+  });
+
+  test('matches the search result whatever the spacing and case', () => {
+    assert.equal(parseLocation('queen  square, BRISTOL', { searchResults }).isValid, true);
+  });
+
+  test('uses the text before a colon as the label', () => {
+    const result = parseLocation('Old Kent Road: Queen Square, Bristol ///filled.count.soap', { searchResults });
+    assert.equal(result.location.label, 'Old Kent Road');
+    assert.equal(result.location.words, 'filled.count.soap');
+    assert.equal(parseLocation('Old Kent Road: Queen Square, Bristol').query, 'Queen Square, Bristol');
+  });
+
+  test('shows why a search found nothing', () => {
+    const notFound = { isFound: false, error: 'No match for "Nowhere" in Bristol.', isTemporary: false };
+    const result = parseLocation('///filled.count.soap Nowhere', { searchResults: { nowhere: notFound } });
+    assert.equal(result.isValid, false);
+    assert.equal(result.error, 'No match for "Nowhere" in Bristol.');
+    assert.equal(result.query, undefined);
+    assert.equal(result.lookupUrl, 'https://what3words.com/filled.count.soap');
+  });
+
+  test('prefers coordinates over looking up the text', () => {
+    const result = parseLocation('Queen Square, Bristol 51.4545,-2.5879', { searchResults });
+    assert.equal(result.location.lat, 51.4545);
+    assert.equal(result.location.matchedName, undefined);
+  });
+});
+
+describe('parseLocations with search results', () => {
+  test('passes the search results to each line', () => {
+    const searchResults = { 'temple meads': { isFound: true, lat: 51.4492, lng: -2.5813, name: 'Temple Meads' } };
+    const [line] = parseLocations('Temple Meads', { searchResults });
+    assert.equal(line.result.location.lat, 51.4492);
   });
 });

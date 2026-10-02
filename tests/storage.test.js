@@ -65,13 +65,14 @@ describe('storage', () => {
 
   test('fills in missing or invalid fields with the defaults', () => {
     const storage = memoryStorage({
-      [STORAGE_KEY]: JSON.stringify({ version: SCHEMA_VERSION, settings: { speedKmh: 5.5 }, doneKeys: ['a', 1, null], plan: 'nope' }),
+      [STORAGE_KEY]: JSON.stringify({ version: SCHEMA_VERSION, settings: { speedKmh: 5.5 }, doneKeys: ['a', 1, null], searchResults: [], plan: 'nope' }),
     });
     const state = loadState(storage);
     const defaults = defaultState();
     assert.deepEqual(state.settings, { ...defaults.settings, speedKmh: 5.5 });
     assert.deepEqual(state.setup, defaults.setup);
     assert.deepEqual(state.doneKeys, ['a']);
+    assert.deepEqual(state.searchResults, {});
     assert.equal(state.plan, null);
   });
 
