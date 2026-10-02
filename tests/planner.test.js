@@ -539,10 +539,9 @@ describe('plan compared with the best possible route', () => {
     return best;
   };
 
-  // plan() is a heuristic, so it can't always find the best route. These
-  // tolerances match how it does today. Multi-start (#77) should tighten
-  // them to never more than 1 short, and never fewer without a finish.
-  test('visits the most points possible on at least 95% of small random cases, and is never more than 1 short', () => {
+  // plan() is a heuristic, so it can't always find the best route, but
+  // starting from several routes keeps it close.
+  test('visits the most points possible on at least 98% of small random cases, and is never more than 1 short', () => {
     const next = random(20);
     const runs = 300;
     let matches = 0;
@@ -554,20 +553,16 @@ describe('plan compared with the best possible route', () => {
       assert.ok(best - visited <= 1, `run ${run} visits ${visited} of a possible ${best}`);
       matches += visited === best ? 1 : 0;
     }
-    assert.ok(matches >= runs * 0.95, `matched the best route on ${matches} of ${runs} cases`);
+    assert.ok(matches >= runs * 0.98, `matched the best route on ${matches} of ${runs} cases`);
   });
 
-  test('without a finish, visits at least as many points as with one on at least 95% of random cases, and is never more than 4 fewer', () => {
+  test('without a finish, visits at least as many points as with one, on random cases', () => {
     const next = random(21);
-    const runs = 300;
-    let atLeastAsMany = 0;
-    for (let run = 0; run < runs; run += 1) {
+    for (let run = 0; run < 300; run += 1) {
       const options = randomOptions(next, { count: 3 + Math.floor(next() * 30), hasFinish: false });
       const withoutFinish = plan(options).order.length;
       const withFinish = plan({ ...options, finish: kmFrom(next() * 6 - 3, next() * 6 - 3) }).order.length;
-      assert.ok(withFinish - withoutFinish <= 4, `run ${run} visits ${withoutFinish} without a finish but ${withFinish} with one`);
-      atLeastAsMany += withoutFinish >= withFinish ? 1 : 0;
+      assert.ok(withoutFinish >= withFinish, `run ${run} visits ${withoutFinish} without a finish but ${withFinish} with one`);
     }
-    assert.ok(atLeastAsMany >= runs * 0.95, `visited at least as many without a finish on ${atLeastAsMany} of ${runs} cases`);
   });
 });
