@@ -211,3 +211,43 @@ export function greedyInsertion({
 
   return route.map((node) => node - 1);
 }
+
+/**
+ * A planned route.
+ *
+ * @typedef {object} Plan
+ * @property {number[]} order Indexes into `points` in visiting order.
+ * @property {number[]} arrivalTimes When the team arrives at each stop in `order`, in milliseconds since the Unix epoch.
+ * @property {number} endEta When the route ends, in milliseconds since the Unix epoch. With a finish, this is the arrival time at the finish. Without one, it's when the last selfie is taken.
+ * @property {number} spareSeconds Time left between `endEta` and the deadline minus the safety margin. Negative only when even the walk to the finish doesn't fit.
+ * @property {number[]} skipped Indexes into `points` that aren't in `order`, in ascending order.
+ */
+
+/**
+ * Plans the route that visits as many points as possible before the deadline
+ * minus the safety margin, ending at the finish if there is one.
+ *
+ * @param {PlanOptions} options The candidate points and the settings to plan with.
+ * @returns {Plan} The visiting order, the timings and the points left out.
+ * @throws {RangeError} If `speedKmh` isn't greater than 0 or `detourFactor` is less than 1.
+ * @example
+ * const { order, skipped } = plan({
+ *   start: { lat: 51.4556, lng: -2.5894 },
+ *   points: [{ lat: 51.4549, lng: -2.6278 }, { lat: 51.4492, lng: -2.5813 }],
+ *   finish: null,
+ *   startTime: Date.parse('2026-10-03T11:00:00+01:00'),
+ *   deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+ * });
+ * order; // [1, 0]
+ * skipped; // []
+ */
+export function plan(options) {
+  const order = greedyInsertion(options);
+  const { arrivalTimes, endEta, spareSeconds } = evaluateRoute({
+    ...options,
+    stops: order.map((index) => options.points[index]),
+  });
+  const visited = new Set(order);
+  const skipped = options.points.map((_, index) => index).filter((index) => !visited.has(index));
+  return { order, arrivalTimes, endEta, spareSeconds, skipped };
+}
