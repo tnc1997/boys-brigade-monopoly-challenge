@@ -61,6 +61,39 @@ describe('planFromSetup', () => {
     assert.equal(plan.startTime, new Date(2026, 9, 3, 11, 30).getTime());
   });
 
+  test('leaves done locations out of the route but keeps them in the points', () => {
+    const { plan: firstPlan } = planFromSetup(setupWith());
+    const doneKey = firstPlan.points[0].key;
+    const { plan } = planFromSetup({ ...setupWith(), doneKeys: [doneKey] });
+    assert.deepEqual(plan.points.map(({ label }) => label), ['Old Kent Road', 'Temple Meads']);
+    assert.deepEqual(plan.order, [1]);
+    assert.deepEqual(plan.skipped, []);
+    assert.equal(plan.arrivalTimes.length, 1);
+  });
+
+  test('maps skipped locations back to their place in the list', () => {
+    const { plan: firstPlan } = planFromSetup(setupWith());
+    const { plan } = planFromSetup({ ...setupWith({ startTimeText: '15:40' }), doneKeys: [firstPlan.points[0].key] });
+    assert.deepEqual(plan.order, []);
+    assert.deepEqual(plan.skipped, [1]);
+  });
+
+  test('re-plans from the current position and time, ignoring the Start field and start time', () => {
+    const from = { lat: 51.4492, lng: -2.5813 };
+    const later = new Date(2026, 9, 3, 13, 15).getTime();
+    const { plan, error } = planFromSetup({ ...setupWith({ startText: 'not a location', startTimeText: '11:00' }), now: later, from });
+    assert.equal(error, null);
+    assert.deepEqual(plan.start, { lat: 51.4492, lng: -2.5813, label: 'Your position', words: null, key: '51.449200,-2.581300' });
+    assert.equal(plan.startTime, later);
+  });
+
+  test('uses the current form values when re-planning', () => {
+    const from = { lat: 51.4492, lng: -2.5813 };
+    const { plan } = planFromSetup({ ...setupWith({ finishText: 'Finish 51.4556,-2.5894' }, { speedKmh: 3.5 }), from });
+    assert.equal(plan.finish.label, 'Finish');
+    assert.equal(plan.settings.speedKmh, 3.5);
+  });
+
   const failures = [
     ['there are no usable locations', { locationsText: 'Nowhere' }, {}, /at least one location/],
     ['the start is invalid', { startText: 'Castle Park' }, {}, /^Start: /],

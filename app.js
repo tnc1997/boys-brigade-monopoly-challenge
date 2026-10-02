@@ -9,6 +9,9 @@ const form = /** @type {HTMLFormElement} */ (document.getElementById('setup-form
 const locationErrors = /** @type {HTMLUListElement} */ (document.getElementById('location-errors'));
 const setupError = /** @type {HTMLParagraphElement} */ (document.getElementById('setup-error'));
 const stopList = /** @type {HTMLDivElement} */ (document.getElementById('stop-list'));
+const replan = /** @type {HTMLDivElement} */ (document.getElementById('replan'));
+const replanButton = /** @type {HTMLButtonElement} */ (document.getElementById('replan-button'));
+const replanStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('replan-status'));
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -115,6 +118,26 @@ function externalLink(href, text, label = text) {
 }
 
 /**
+ * Creates the button that marks a location's selfie as done, or not done.
+ *
+ * @param {import('./locations.js').Location} location The location.
+ * @param {boolean} isDone Whether the selfie is done.
+ * @returns {HTMLButtonElement} The button.
+ */
+function doneToggle(location, isDone) {
+  const toggle = element(
+    'button',
+    `inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold ${isDone ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-white text-emerald-800 ring-1 ring-emerald-700 hover:bg-emerald-50'}`,
+    isDone ? '✓ Selfie done' : 'Mark selfie done',
+  );
+  toggle.type = 'button';
+  toggle.dataset.doneKey = location.key;
+  toggle.setAttribute('aria-pressed', String(isDone));
+  toggle.setAttribute('aria-label', `Selfie done at ${location.label}`);
+  return toggle;
+}
+
+/**
  * Creates the list item for a stop, or for the walk to the finish.
  *
  * @param {import('./route.js').RouteStop} stop The stop.
@@ -141,16 +164,7 @@ function stopItem(stop, isFinish) {
   );
   const links = element('div', 'mt-1 flex flex-wrap gap-2');
   if (!isFinish) {
-    const toggle = element(
-      'button',
-      `inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold ${isDone ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-white text-emerald-800 ring-1 ring-emerald-700 hover:bg-emerald-50'}`,
-      isDone ? '✓ Selfie done' : 'Mark selfie done',
-    );
-    toggle.type = 'button';
-    toggle.dataset.doneKey = stop.location.key;
-    toggle.setAttribute('aria-pressed', String(isDone));
-    toggle.setAttribute('aria-label', `Selfie done at ${stop.location.label}`);
-    links.append(toggle);
+    links.append(doneToggle(stop.location, isDone));
   }
   links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
   if (stop.what3wordsUrl) {
@@ -161,18 +175,22 @@ function stopItem(stop, isFinish) {
   return item;
 }
 
-/** Shows the current plan as a list of stops, then any skipped locations. */
+/** Shows the current plan as a list of stops, then any skipped and done locations. */
 function showPlan() {
   const { plan } = state;
   // Plans saved before walk settings were kept with the plan can't be shown, so they need planning again.
-  if (!plan?.settings) {
+  const hasPlan = Boolean(plan?.settings);
+  replan.classList.toggle('hidden', !hasPlan);
+  replan.classList.toggle('flex', hasPlan);
+  if (!hasPlan) {
     stopList.replaceChildren(element('p', 'text-sm text-slate-600', 'Add your locations above and press Plan route.'));
     return;
   }
   const route = describeRoute(plan);
   const ending = route.finish ? `arriving at the finish at ${timeFormat.format(route.endEta)}` : `with the last selfie at ${timeFormat.format(route.endEta)}`;
-  const summary = element('p', 'text-sm', `Visiting ${route.stops.length} of ${plan.points.length} locations, ${ending}.`);
   const { done, total } = progress(plan, state.doneKeys);
+  const visiting = done === 0 ? `${route.stops.length} of ${total} locations` : `${route.stops.length} of ${total - done} locations still to do`;
+  const summary = element('p', 'text-sm', `Visiting ${visiting}, ${ending}.`);
   const counter = element('p', 'mt-1 text-sm font-semibold text-emerald-800', `Selfies done: ${done} of ${total}`);
   counter.setAttribute('aria-live', 'polite');
 
@@ -189,6 +207,23 @@ function showPlan() {
     const skipped = element('ul', 'mt-2 flex flex-col gap-1 text-sm text-slate-600');
     skipped.append(...route.skipped.map((location) => element('li', '', location.label)));
     sections.push(heading, skipped);
+  }
+
+  // Done locations that aren't stops on this route (because it was planned
+  // after their selfie) are listed so a mistaken tick can be undone.
+  const routeKeys = new Set(route.stops.map(({ location }) => location.key));
+  const doneElsewhere = plan.points.filter(({ key }) => state.doneKeys.includes(key) && !routeKeys.has(key));
+  if (doneElsewhere.length > 0) {
+    const heading = element('h3', 'mt-4 text-sm font-semibold', `Done (${doneElsewhere.length})`);
+    const doneList = element('ul', 'mt-2 flex flex-col gap-2');
+    doneList.append(
+      ...doneElsewhere.map((location) => {
+        const item = element('li', 'flex flex-wrap items-center justify-between gap-2 text-sm');
+        item.append(element('span', 'min-w-0 break-words', location.label), doneToggle(location, true));
+        return item;
+      }),
+    );
+    sections.push(heading, doneList);
   }
   stopList.replaceChildren(...sections);
 }
@@ -210,9 +245,14 @@ form.addEventListener('input', (event) => {
   }
 });
 
-form.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const result = planFromSetup({ setup: state.setup, settings: state.settings, now: Date.now() });
+/**
+ * Plans the route from the setup form and shows it.
+ *
+ * @param {import('./planner.js').LatLng | null} from The team's current position to re-plan from, or `null` to start at the Start field.
+ * @returns {string | null} What stopped planning, or `null` if a plan was made.
+ */
+function planRoute(from) {
+  const result = planFromSetup({ setup: state.setup, settings: state.settings, now: Date.now(), doneKeys: state.doneKeys, from });
   showInvalidLines(result.invalidLines);
   showSetupError(result.error);
   if (result.plan) {
@@ -220,6 +260,52 @@ form.addEventListener('submit', (event) => {
     saveState(state);
     showPlan();
   }
+  return result.error;
+}
+
+/** Messages for each way getting the position can fail, by `GeolocationPositionError.code`. */
+const GEOLOCATION_ERRORS = {
+  1: 'Location access is blocked. Allow location for this site in your browser settings, or update the Start field and press Plan route.',
+  2: "Your location isn't available right now. Try again in a moment, or update the Start field and press Plan route.",
+  3: 'Getting your location took too long. Try again, ideally with a clear view of the sky.',
+};
+
+/**
+ * Shows a message under the Re-plan from here button.
+ *
+ * @param {string} message The message.
+ * @param {boolean} isError Whether the message is an error.
+ */
+function showReplanStatus(message, isError) {
+  replanStatus.textContent = message;
+  replanStatus.classList.toggle('text-red-700', isError);
+  replanStatus.classList.toggle('text-slate-600', !isError);
+}
+
+replanButton.addEventListener('click', () => {
+  if (!('geolocation' in navigator)) {
+    showReplanStatus("This browser can't share your location. Update the Start field and press Plan route instead.", true);
+    return;
+  }
+  replanButton.disabled = true;
+  showReplanStatus('Getting your location…', false);
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      replanButton.disabled = false;
+      const error = planRoute({ lat: position.coords.latitude, lng: position.coords.longitude });
+      showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
+    },
+    (error) => {
+      replanButton.disabled = false;
+      showReplanStatus(GEOLOCATION_ERRORS[error.code] ?? "Your location couldn't be found. Try again.", true);
+    },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 },
+  );
+});
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  planRoute(null);
 });
 
 fillForm();

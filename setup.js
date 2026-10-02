@@ -46,15 +46,22 @@ export function timeToday(time, now) {
 /**
  * Parses the setup form and plans the route. Lines of the location list
  * that can't be used are returned so they can be shown, but don't stop the
- * rest from being planned.
+ * rest from being planned. Locations whose selfie is done are kept in the
+ * plan's `points` but left out of the route.
+ *
+ * To re-plan during the challenge, pass the team's position as `from`: the
+ * route then starts there and now, instead of at the Start field and start
+ * time.
  *
  * @param {object} options The setup form and settings.
  * @param {import('./storage.js').Setup} options.setup What was entered in the setup form.
  * @param {import('./storage.js').Settings} options.settings Settings for planning.
  * @param {number} options.now The current time, in milliseconds since the Unix epoch.
+ * @param {string[]} [options.doneKeys=[]] Keys of the locations whose selfie has been taken.
+ * @param {import('./planner.js').LatLng | null} [options.from=null] The team's current position, to re-plan from.
  * @returns {SetupResult} The plan, or what stops planning, and any unusable lines.
  */
-export function planFromSetup({ setup, settings, now }) {
+export function planFromSetup({ setup, settings, now, doneKeys = [], from = null }) {
   const lines = parseLocations(setup.locationsText);
   const invalidLines = lines.filter(({ result }) => !result.isValid);
   const failure = (error) => ({ plan: null, error, invalidLines });
@@ -64,7 +71,9 @@ export function planFromSetup({ setup, settings, now }) {
     return failure('Add at least one location with its coordinates.');
   }
 
-  const start = parseLocation(setup.startText);
+  const start = from
+    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', words: null, key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
+    : parseLocation(setup.startText);
   if (!start.isValid) {
     return failure(`Start: ${start.error}`);
   }
@@ -73,7 +82,7 @@ export function planFromSetup({ setup, settings, now }) {
     return failure(`Finish: ${finish.error}`);
   }
 
-  const startTime = setup.startTimeText.trim() === '' ? now : timeToday(setup.startTimeText, now);
+  const startTime = from || setup.startTimeText.trim() === '' ? now : timeToday(setup.startTimeText, now);
   if (startTime === null) {
     return failure('Start time: Enter a time like 11:00, or leave it blank to start now.');
   }
@@ -97,10 +106,32 @@ export function planFromSetup({ setup, settings, now }) {
     dwellSeconds: settings.dwellSeconds,
     safetyMarginSeconds: settings.safetyMarginSeconds,
   };
-  const result = plan({ start: start.location, points, finish: finish?.location ?? null, startTime, deadline, ...planSettings });
+  // Plan only the locations still to visit, then map the result back to
+  // indexes into every location, leaving done ones out of `skipped`.
+  const done = new Set(doneKeys);
+  const remaining = points.map((point, index) => ({ point, index })).filter(({ point }) => !done.has(point.key));
+  const result = plan({
+    start: start.location,
+    points: remaining.map(({ point }) => point),
+    finish: finish?.location ?? null,
+    startTime,
+    deadline,
+    ...planSettings,
+  });
+  const toPointIndex = (index) => remaining[index].index;
 
   return {
-    plan: { ...result, points, start: start.location, finish: finish?.location ?? null, startTime, deadline, settings: planSettings },
+    plan: {
+      ...result,
+      order: result.order.map(toPointIndex),
+      skipped: result.skipped.map(toPointIndex),
+      points,
+      start: start.location,
+      finish: finish?.location ?? null,
+      startTime,
+      deadline,
+      settings: planSettings,
+    },
     error: null,
     invalidLines,
   };
