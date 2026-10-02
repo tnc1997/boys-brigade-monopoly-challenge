@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { parseLocationLine, parseLocationList } from '../locations.js';
+import { parseLocation, parseLocations } from '../locations.js';
 
-describe('parseLocationLine', () => {
+describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
-    const result = parseLocationLine(line);
+    const result = parseLocation(line);
     assert.equal(result.isValid, true, result.error);
     assert.deepEqual(result.location, { words: null, ...expected });
   };
@@ -40,70 +40,70 @@ describe('parseLocationLine', () => {
 
   test('removes separators around the label', () => {
     for (const line of ['Old Kent Road, 51.4545,-2.5879', 'Old Kent Road - 51.4545,-2.5879', '51.4545,-2.5879 | Old Kent Road', '  Old   Kent Road ,  51.4545,-2.5879  ']) {
-      assert.equal(parseLocationLine(line).location.label, 'Old Kent Road', line);
+      assert.equal(parseLocation(line).location.label, 'Old Kent Road', line);
     }
   });
 
   test('keeps numbers and punctuation inside the label', () => {
-    assert.equal(parseLocationLine('Platform 9¾, King’s Cross 51.4545,-2.5879').location.label, 'Platform 9¾, King’s Cross');
+    assert.equal(parseLocation('Platform 9¾, King’s Cross 51.4545,-2.5879').location.label, 'Platform 9¾, King’s Cross');
   });
 
   test('accepts what3words links', () => {
     for (const line of ['https://w3w.co/filled.count.soap 51.4545,-2.5879', 'what3words.com/filled.count.soap 51.4545,-2.5879', 'filled.count.soap 51.4545,-2.5879']) {
-      assert.equal(parseLocationLine(line).location.words, 'filled.count.soap', line);
+      assert.equal(parseLocation(line).location.words, 'filled.count.soap', line);
     }
   });
 
   test('labels a location with its what3words address when there is no label', () => {
-    assert.equal(parseLocationLine('///filled.count.soap 51.4545,-2.5879').location.label, '///filled.count.soap');
+    assert.equal(parseLocation('///filled.count.soap 51.4545,-2.5879').location.label, '///filled.count.soap');
   });
 
   test('gives the same key to the same coordinates written differently', () => {
-    assert.equal(parseLocationLine('51.4545,-2.5879').location.key, parseLocationLine('A 51.45450, -2.58790').location.key);
+    assert.equal(parseLocation('51.4545,-2.5879').location.key, parseLocation('A 51.45450, -2.58790').location.key);
   });
 
   test('rejects an out-of-range latitude', () => {
-    const result = parseLocationLine('91.0,-2.5879');
+    const result = parseLocation('91.0,-2.5879');
     assert.equal(result.isValid, false);
     assert.match(result.error, /latitude 91.0 must be between -90 and 90/);
   });
 
   test('rejects an out-of-range longitude', () => {
-    const result = parseLocationLine('51.4545,-181.5');
+    const result = parseLocation('51.4545,-181.5');
     assert.equal(result.isValid, false);
     assert.match(result.error, /longitude -181.5 must be between -180 and 180/);
   });
 
   test('asks for the coordinates when a line only has a what3words address', () => {
-    const result = parseLocationLine('Old Kent Road ///filled.count.soap');
+    const result = parseLocation('Old Kent Road ///filled.count.soap');
     assert.equal(result.isValid, false);
     assert.match(result.error, /Add the coordinates for \/\/\/filled\.count\.soap/);
     assert.equal(result.lookupUrl, 'https://what3words.com/filled.count.soap');
   });
 
   test('asks for the coordinates when a line only has a label', () => {
-    const result = parseLocationLine('Old Kent Road');
+    const result = parseLocation('Old Kent Road');
     assert.equal(result.isValid, false);
     assert.match(result.error, /Add the coordinates/);
     assert.equal(result.lookupUrl, undefined);
   });
 
   test('rejects more than one set of coordinates', () => {
-    const result = parseLocationLine('51.4545,-2.5879 51.4600,-2.6000');
+    const result = parseLocation('51.4545,-2.5879 51.4600,-2.6000');
     assert.equal(result.isValid, false);
     assert.match(result.error, /more than one set of coordinates/);
   });
 
   test('rejects more than one what3words address', () => {
-    const result = parseLocationLine('///filled.count.soap ///index.home.raft 51.4545,-2.5879');
+    const result = parseLocation('///filled.count.soap ///index.home.raft 51.4545,-2.5879');
     assert.equal(result.isValid, false);
     assert.match(result.error, /more than one what3words address/);
   });
 });
 
-describe('parseLocationList', () => {
+describe('parseLocations', () => {
   test('parses each line and ignores blank lines', () => {
-    const lines = parseLocationList('Old Kent Road 51.4545,-2.5879\n\n   \r\nWhitechapel Road ///filled.count.soap\n');
+    const lines = parseLocations('Old Kent Road 51.4545,-2.5879\n\n   \r\nWhitechapel Road ///filled.count.soap\n');
     assert.deepEqual(
       lines.map(({ lineNumber, text, result }) => [lineNumber, text, result.isValid]),
       [
@@ -114,6 +114,6 @@ describe('parseLocationList', () => {
   });
 
   test('returns nothing for an empty list', () => {
-    assert.deepEqual(parseLocationList(''), []);
+    assert.deepEqual(parseLocations(''), []);
   });
 });

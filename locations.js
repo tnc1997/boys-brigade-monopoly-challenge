@@ -14,16 +14,16 @@ import { parseWords } from './what3words.js';
 /**
  * The result of parsing a line of the location list.
  *
- * @typedef {{ isValid: true, location: Location } | { isValid: false, error: string, lookupUrl?: string }} ParsedLine
+ * @typedef {{ isValid: true, location: Location } | { isValid: false, error: string, lookupUrl?: string }} ParsedLocation
  */
 
 /**
  * A non-blank line of the location list and the result of parsing it.
  *
- * @typedef {object} ParsedListLine
+ * @typedef {object} ParsedLocationLine
  * @property {number} lineNumber The line's number in the list, starting at 1.
  * @property {string} text The line as typed.
- * @property {ParsedLine} result The result of parsing the line.
+ * @property {ParsedLocation} result The result of parsing the line.
  */
 
 /** Coordinates as `lat,lng` in decimal degrees, with or without a space after the comma. */
@@ -43,12 +43,12 @@ const SEPARATORS = /^[\s,;|–—-]+|[\s,;|–—-]+$/g;
  * can link to it, and a label (any remaining text), in any order.
  *
  * @param {string} line The line as typed.
- * @returns {ParsedLine} The location, or a message saying what's wrong.
+ * @returns {ParsedLocation} The location, or a message saying what's wrong.
  * @example
- * parseLocationLine('Old Kent Road ///filled.count.soap 51.4545,-2.5879');
+ * parseLocation('Old Kent Road ///filled.count.soap 51.4545,-2.5879');
  * // { isValid: true, location: { lat: 51.4545, lng: -2.5879, label: 'Old Kent Road', words: 'filled.count.soap', key: '51.454500,-2.587900' } }
  */
-export function parseLocationLine(line) {
+export function parseLocation(line) {
   const coordinates = [...line.matchAll(COORDINATES)];
   const words = [...line.matchAll(WORDS)];
 
@@ -106,12 +106,12 @@ export function parseLocationLine(line) {
  * Parses the location list, one location per line. Blank lines are ignored.
  *
  * @param {string} text The location list as typed.
- * @returns {ParsedListLine[]} Each non-blank line with the result of parsing it, in order.
+ * @returns {ParsedLocationLine[]} Each non-blank line with the result of parsing it, in order.
  */
-export function parseLocationList(text) {
+export function parseLocations(text) {
   return text
     .split(/\r?\n/)
     .map((line, index) => ({ lineNumber: index + 1, text: line }))
     .filter(({ text: line }) => line.trim() !== '')
-    .map((line) => ({ ...line, result: parseLocationLine(line.text) }));
+    .map((line) => ({ ...line, result: parseLocation(line.text) }));
 }
