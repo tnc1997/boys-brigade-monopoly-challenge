@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Plan a walking route that visits as many Monopoly Challenge locations as possible before the deadline.">
     <title>Monopoly Challenge Planner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+      integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" defer
+      integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==" crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin"></script>
     <script type="module" src="app.js"></script>
   </head>
   <body class="min-h-dvh overflow-x-hidden bg-page text-ink antialiased">
@@ -103,7 +107,8 @@
           <p class="text-sm text-muted">Add your locations above and press Plan route.</p>
         </div>
         <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" class="mt-3" hidden>
-          <p class="text-sm text-muted">The map of your route will appear here.</p>
+          <div id="map" class="h-[60dvh] min-h-80 overflow-hidden rounded-md ring-1 ring-line" aria-label="Map of the route"></div>
+          <p id="map-status" class="mt-2 hidden text-sm text-muted" role="status"></p>
         </div>
       </section>
     </main>
