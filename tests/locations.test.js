@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { parseGoogleMapsLink, parseLocation, parseLocations } from '../locations.js';
+import { parseGoogleMapsUrl, parseLocation, parseLocations } from '../locations.js';
 
 describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
@@ -56,7 +56,7 @@ describe('parseLocation', () => {
     }
   });
 
-  test('accepts what3words links', () => {
+  test('accepts what3words URLs', () => {
     for (const line of ['https://w3w.co/filled.count.soap 51.4545,-2.5879', 'what3words.com/filled.count.soap 51.4545,-2.5879', 'filled.count.soap 51.4545,-2.5879']) {
       assert.equal(parseLocation(line).location.words, 'filled.count.soap', line);
     }
@@ -126,23 +126,23 @@ describe('parseLocations', () => {
   });
 });
 
-describe('parseGoogleMapsLink', () => {
-  const assertCoordinates = (link, lat, lng, placeName = null) => {
-    assert.deepEqual(parseGoogleMapsLink(link), { isValid: true, coordinates: { lat, lng }, placeName }, link);
+describe('parseGoogleMapsUrl', () => {
+  const assertCoordinates = (url, lat, lng, placeName = null) => {
+    assert.deepEqual(parseGoogleMapsUrl(url), { isValid: true, coordinates: { lat, lng }, placeName }, url);
   };
 
-  test('reads ?q=lat,lng links', () => {
+  test('reads ?q=lat,lng URLs', () => {
     assertCoordinates('https://www.google.com/maps?q=51.4545,-2.5879', '51.4545', '-2.5879');
     assertCoordinates('https://maps.google.com/?q=51.4545%2C-2.5879', '51.4545', '-2.5879');
     assertCoordinates('https://www.google.co.uk/maps?q=51.4545,+-2.5879', '51.4545', '-2.5879');
   });
 
-  test('reads ?query=lat,lng and ?destination=lat,lng links', () => {
+  test('reads ?query=lat,lng and ?destination=lat,lng URLs', () => {
     assertCoordinates('https://www.google.com/maps/search/?api=1&query=51.4545,-2.5879', '51.4545', '-2.5879');
     assertCoordinates('https://www.google.com/maps/dir/?api=1&destination=51.4545,-2.5879', '51.4545', '-2.5879');
   });
 
-  test('reads @lat,lng links', () => {
+  test('reads @lat,lng URLs', () => {
     assertCoordinates('https://www.google.com/maps/@51.4545,-2.5879,17z', '51.4545', '-2.5879');
   });
 
@@ -155,30 +155,30 @@ describe('parseGoogleMapsLink', () => {
     );
   });
 
-  test('reads links without https://', () => {
+  test('reads URLs without https://', () => {
     assertCoordinates('google.com/maps?q=51.4545,-2.5879', '51.4545', '-2.5879');
     assertCoordinates('maps.google.com/?q=51.4545,-2.5879', '51.4545', '-2.5879');
   });
 
-  test('rejects short links', () => {
-    for (const link of ['https://maps.app.goo.gl/abc123', 'https://goo.gl/maps/abc123', 'maps.app.goo.gl/abc123']) {
-      const result = parseGoogleMapsLink(link);
-      assert.equal(result.isValid, false, link);
+  test('rejects short URLs', () => {
+    for (const url of ['https://maps.app.goo.gl/abc123', 'https://goo.gl/maps/abc123', 'maps.app.goo.gl/abc123']) {
+      const result = parseGoogleMapsUrl(url);
+      assert.equal(result.isValid, false, url);
       assert.match(result.error, /Short Google Maps links/);
     }
   });
 
-  test('rejects links without coordinates', () => {
-    for (const link of ['https://www.google.com/maps/search/?api=1&query=Castle+Park', 'https://www.google.com/maps?q=Castle+Park', 'https://www.google.com/maps']) {
-      const result = parseGoogleMapsLink(link);
-      assert.equal(result.isValid, false, link);
+  test('rejects URLs without coordinates', () => {
+    for (const url of ['https://www.google.com/maps/search/?api=1&query=Castle+Park', 'https://www.google.com/maps?q=Castle+Park', 'https://www.google.com/maps']) {
+      const result = parseGoogleMapsUrl(url);
+      assert.equal(result.isValid, false, url);
       assert.match(result.error, /doesn't include coordinates/);
     }
   });
 });
 
-describe('parseLocation with Google Maps links', () => {
-  test('uses the coordinates from the link', () => {
+describe('parseLocation with Google Maps URLs', () => {
+  test('uses the coordinates from the url', () => {
     const { location } = parseLocation('https://www.google.com/maps?q=51.4545,-2.5879');
     assert.deepEqual(location, { lat: 51.4545, lng: -2.5879, label: '51.4545, -2.5879', words: null, key: '51.454500,-2.587900' });
   });
@@ -194,22 +194,22 @@ describe('parseLocation with Google Maps links', () => {
   });
 
   test("labels a location with the place's name when there is no label", () => {
-    const link = 'https://www.google.com/maps/place/Castle+Park/@51.4560,-2.5900,17z/data=!3d51.4556!4d-2.5894';
-    assert.equal(parseLocation(link).location.label, 'Castle Park');
-    assert.equal(parseLocation(`Start ${link}`).location.label, 'Start');
+    const url = 'https://www.google.com/maps/place/Castle+Park/@51.4560,-2.5900,17z/data=!3d51.4556!4d-2.5894';
+    assert.equal(parseLocation(url).location.label, 'Castle Park');
+    assert.equal(parseLocation(`Start ${url}`).location.label, 'Start');
   });
 
-  test('does not mistake the link for a what3words address', () => {
+  test('does not mistake the url for a what3words address', () => {
     assert.equal(parseLocation('maps.google.com/?q=51.4545,-2.5879').location.words, null);
   });
 
-  test('rejects a short link with a message', () => {
+  test('rejects a short url with a message', () => {
     const result = parseLocation('Old Kent Road https://maps.app.goo.gl/abc123');
     assert.equal(result.isValid, false);
     assert.match(result.error, /Short Google Maps links/);
   });
 
-  test('rejects a link and coordinates on the same line', () => {
+  test('rejects a url and coordinates on the same line', () => {
     const result = parseLocation('https://www.google.com/maps?q=51.4545,-2.5879 51.4600,-2.6000');
     assert.equal(result.isValid, false);
     assert.match(result.error, /more than one set of coordinates/);
