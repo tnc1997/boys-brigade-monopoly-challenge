@@ -4,7 +4,7 @@ import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
 import { planFromSetup, searchesNeeded, timeToday } from './setup.js';
-import { defaultState, loadState, saveState } from './storage.js';
+import { defaultState, loadState, resetChallenge, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
 const state = loadState();
@@ -609,6 +609,23 @@ for (const tab of tabs) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   planRoute(null);
+});
+
+document.getElementById('new-challenge').addEventListener('click', () => {
+  if (!window.confirm('Start a new challenge? This clears the location list, the selfies ticked off and the route. Your settings are kept.')) {
+    return;
+  }
+  Object.assign(state, resetChallenge(state));
+  saveState(state);
+  fillForm();
+  previewLines();
+  showMatches([]);
+  showSetupError(null);
+  showReplanStatus('Uses your current location and time, and the locations still to visit.', false);
+  shouldFitMap = true;
+  showPlan();
+  showSettingsSummary();
+  locationsField.focus();
 });
 
 /**
