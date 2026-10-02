@@ -89,6 +89,7 @@ describe('searchPlaces', () => {
     });
     assert.deepEqual(urls.map((url) => url.searchParams.get('q')), ['Queen Square', 'Temple Meads']);
     assert.deepEqual(waits, [REQUEST_INTERVAL_MS]);
+    assert.ok(REQUEST_INTERVAL_MS >= 1500, 'leaves a generous buffer over Nominatim\'s 1 request per second');
     assert.deepEqual(progress, [
       [1, 2],
       [2, 2],
