@@ -1,7 +1,7 @@
 import { describeRoute, formatDuration, mapRoute, progress, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
-import { createMap, showRoute } from './map.js';
+import { createMap, showPosition, showRoute } from './map.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -29,6 +29,15 @@ let routeMap = null;
 
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
+
+/** The team's latest position from watching the location, or `null` if there isn't one yet. */
+let latestPosition = null;
+
+/** Whether the location is being watched, which starts the first time the map is shown. */
+let isWatchingPosition = false;
+
+/** How old a watched position can be and still be used to re-plan, in milliseconds. */
+const POSITION_MAX_AGE_MS = 60000;
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -388,7 +397,22 @@ function showReplanStatus(message, isError) {
   replanStatus.classList.toggle('text-muted', !isError);
 }
 
+/**
+ * Re-plans from a position and shows how it went.
+ *
+ * @param {import('./planner.js').LatLng} position The team's position.
+ */
+async function replanFrom(position) {
+  const error = await planRoute(position);
+  showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
+}
+
 replanButton.addEventListener('click', () => {
+  // Use the watched position if it's recent, rather than waiting for a new one.
+  if (latestPosition && Date.now() - latestPosition.time <= POSITION_MAX_AGE_MS) {
+    replanFrom({ lat: latestPosition.lat, lng: latestPosition.lng });
+    return;
+  }
   if (!('geolocation' in navigator)) {
     showReplanStatus("This browser can't share your location. Update the Start field and press Plan route instead.", true);
     return;
@@ -396,10 +420,7 @@ replanButton.addEventListener('click', () => {
   replanButton.disabled = true;
   showReplanStatus('Getting your location…', false);
   navigator.geolocation.getCurrentPosition(
-    async (position) => {
-      const error = await planRoute({ lat: position.coords.latitude, lng: position.coords.longitude });
-      showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
-    },
+    (position) => replanFrom({ lat: position.coords.latitude, lng: position.coords.longitude }),
     (error) => {
       replanButton.disabled = false;
       showReplanStatus(GEOLOCATION_ERRORS[error.code] ?? "Your location couldn't be found. Try again.", true);
@@ -441,9 +462,57 @@ function showMap() {
     return;
   }
   routeMap = createMap(mapContainer);
-  mapStatus.classList.toggle('hidden', routeMap !== null);
-  mapStatus.textContent = routeMap ? '' : "The map couldn't load, which usually means there's no signal. The List tab still works.";
+  showMapStatus(routeMap ? null : "The map couldn't load, which usually means there's no signal. The List tab still works.");
   updateMap();
+  if (routeMap && latestPosition) {
+    showPosition(routeMap, latestPosition);
+  }
+  watchPosition();
+}
+
+/**
+ * Shows a message under the map, or hides it.
+ *
+ * @param {string | null} message The message, or `null` to hide it.
+ */
+function showMapStatus(message) {
+  mapStatus.textContent = message ?? '';
+  mapStatus.classList.toggle('hidden', message === null);
+}
+
+/** Messages for each way watching the position can fail, by `GeolocationPositionError.code`. */
+const WATCH_ERRORS = {
+  1: "Location access is blocked, so your position isn't shown. Allow location for this site in your browser settings to see it.",
+  2: "Your position isn't available right now. It will appear when your phone finds it.",
+  3: 'Still looking for your position…',
+};
+
+/** Starts watching the team's position, so it's shown on the map and can be used to re-plan. */
+function watchPosition() {
+  if (isWatchingPosition || !('geolocation' in navigator)) {
+    return;
+  }
+  isWatchingPosition = true;
+  navigator.geolocation.watchPosition(
+    (position) => {
+      latestPosition = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        time: position.timestamp,
+      };
+      if (routeMap) {
+        showPosition(routeMap, latestPosition);
+        showMapStatus(null);
+      }
+    },
+    (error) => {
+      if (routeMap) {
+        showMapStatus(WATCH_ERRORS[error.code] ?? "Your position couldn't be found.");
+      }
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 },
+  );
 }
 
 /**
