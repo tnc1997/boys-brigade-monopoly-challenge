@@ -120,7 +120,7 @@
     </main>
 
     <dialog id="settings-dialog" aria-labelledby="settings-heading"
-      class="m-auto w-[min(calc(100%-2rem),28rem)] rounded-lg bg-surface p-0 text-ink shadow-xl ring-1 ring-line backdrop:bg-black/50">
+      class="m-auto max-h-[calc(100dvh-2rem)] w-[min(calc(100%-2rem),28rem)] overflow-y-auto overscroll-contain rounded-lg bg-surface p-0 text-ink shadow-xl ring-1 ring-line backdrop:bg-black/50">
       <form id="settings-form" method="dialog" class="flex flex-col gap-4 p-4">
         <h2 id="settings-heading" class="text-base font-semibold">Settings</h2>
 
@@ -135,8 +135,35 @@
           </div>
         </fieldset>
 
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div class="flex flex-col gap-1">
+            <label for="settings-selfie" class="text-sm font-medium">Selfie time <span class="font-normal text-muted">(minutes per stop)</span></label>
+            <input id="settings-selfie" data-panel-setting="dwellSeconds" data-scale="60" type="number" inputmode="decimal" required min="0" max="30" step="0.5" aria-describedby="settings-selfie-hint" class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 invalid:border-danger">
+            <p id="settings-selfie-hint" class="text-xs text-muted">Include time to upload the photo.</p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="settings-margin" class="text-sm font-medium">Safety margin <span class="font-normal text-muted">(minutes)</span></label>
+            <input id="settings-margin" data-panel-setting="safetyMarginSeconds" data-scale="60" type="number" inputmode="decimal" required min="0" max="60" step="1" aria-describedby="settings-margin-hint" class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 invalid:border-danger">
+            <p id="settings-margin-hint" class="text-xs text-muted">Spare time to keep before the deadline.</p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="settings-detour" class="text-sm font-medium">Detour factor <span class="font-normal text-muted">(times)</span></label>
+            <input id="settings-detour" data-panel-setting="detourFactor" type="number" inputmode="decimal" required min="1" max="2" step="0.05" aria-describedby="settings-detour-hint" class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 invalid:border-danger">
+            <p id="settings-detour-hint" class="text-xs text-muted">How much further walking routes are than a straight line, e.g. 1.3 is 30% further.</p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="settings-deadline" class="text-sm font-medium">Deadline</label>
+            <input id="settings-deadline" data-panel-setting="deadline" type="time" required class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 invalid:border-danger">
+          </div>
+          <div class="flex flex-col gap-1 sm:col-span-2">
+            <label for="settings-finish" class="text-sm font-medium">Finish <span class="font-normal text-muted">(optional)</span></label>
+            <input id="settings-finish" data-panel-setup="finishText" type="text" autocapitalize="off" spellcheck="false" aria-describedby="settings-finish-hint" placeholder="Leave blank if there's no finish" class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 invalid:border-danger">
+            <p id="settings-finish-hint" class="text-xs text-muted">Coordinates, a Google Maps link or an address. Clear it if the finish is cancelled.</p>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-2">
-          <button value="cancel" formnovalidate class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft">Cancel</button>
+          <button id="settings-cancel" type="button" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft">Cancel</button>
           <button id="settings-save" value="save" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface bg-accent text-white hover:bg-accent-strong">Save and re-plan</button>
         </div>
       </form>
