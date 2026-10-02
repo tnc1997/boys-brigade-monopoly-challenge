@@ -163,7 +163,7 @@ export function parseLocation(line) {
     if (wordsText) {
       return {
         isValid: false,
-        error: `Add the coordinates for ///${wordsText} as lat,lng, like 51.4545,-2.5879. Open it in what3words to see where it is, then long-press the same spot in Google Maps and copy the pin's coordinates onto this line.`,
+        error: `Add the coordinates for ///${wordsText} as lat,lng, like 51.4545,-2.5879. Open it in what3words to see where it is, then long-press the same spot in Google Maps to drop a pin, and copy the coordinates from the search box onto this line.`,
         lookupUrl: `https://what3words.com/${wordsText}`,
       };
     }
