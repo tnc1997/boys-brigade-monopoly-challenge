@@ -33,11 +33,13 @@ const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getEle
 const timeWarningBanner = /** @type {HTMLDivElement} */ (document.getElementById('time-warning'));
 const timeWarningText = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-text'));
 const countdown = /** @type {HTMLSpanElement} */ (document.getElementById('countdown'));
+const offlineBadge = /** @type {HTMLSpanElement} */ (document.getElementById('offline-badge'));
 const countdownDeadline = /** @type {HTMLSpanElement} */ (document.getElementById('countdown-deadline'));
 
 /** The settings panel's other fields, bound to `state.settings` or `state.setup` by their data attributes. */
 const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
 const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-status'));
+const mapTilesStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-tiles-status'));
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
 let routeMap = null;
@@ -520,7 +522,10 @@ function showMap() {
     updateMap();
     return;
   }
-  routeMap = createMap(mapContainer);
+  routeMap = createMap(mapContainer, {
+    onTilesFailed: () => mapTilesStatus.classList.remove('hidden'),
+    onTilesLoaded: () => mapTilesStatus.classList.add('hidden'),
+  });
   showMapStatus(routeMap ? null : "The map couldn't load, which usually means there's no signal. The List tab still works.");
   updateMap();
   if (routeMap && latestPosition) {
@@ -694,7 +699,24 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+/** Shows the Offline badge in the header when the phone has no connection. */
+function showConnection() {
+  offlineBadge.classList.toggle('hidden', navigator.onLine);
+  offlineBadge.classList.toggle('inline-block', !navigator.onLine);
+}
+
+window.addEventListener('online', showConnection);
+window.addEventListener('offline', showConnection);
+
+// Save the app's files so it opens and works without signal after the first visit.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {
+    // The app still works online without it.
+  });
+}
+
 fillForm();
+showConnection();
 showCountdown();
 showSettingsSummary();
 previewLines();
