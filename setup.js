@@ -21,6 +21,7 @@ import { plan } from './planner.js';
  * @typedef {object} SetupResult
  * @property {SavedPlan | null} plan The plan, or `null` if the form has a problem that stops planning.
  * @property {string | null} error What stops planning, or `null` if a plan was made.
+ * @property {import('./locations.js').ParsedLocationLine[]} lines Every non-blank line of the location list with the result of parsing it.
  * @property {import('./locations.js').ParsedLocationLine[]} invalidLines Lines of the location list that couldn't be used. They don't stop planning.
  * @property {SearchMatch[]} matches What each looked-up address or place name matched, so the team can check them.
  */
@@ -84,7 +85,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
       matches.push({ source, label: parsed.location.label, matchedName: parsed.location.matchedName });
     }
   };
-  const failure = (error) => ({ plan: null, error, invalidLines, matches });
+  const failure = (error) => ({ plan: null, error, lines, invalidLines, matches });
 
   const points = lines.filter(({ result }) => result.isValid).map(({ result }) => result.location);
   if (points.length === 0) {
@@ -155,6 +156,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
       settings: planSettings,
     },
     error: null,
+    lines,
     invalidLines,
     matches,
   };

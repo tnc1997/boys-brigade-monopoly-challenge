@@ -1,5 +1,6 @@
 import { describeRoute, formatDuration, progress, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
+import { parseLocations } from './locations.js';
 import { planFromSetup, searchesNeeded } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -7,7 +8,8 @@ import { loadState, saveState } from './storage.js';
 const state = loadState();
 
 const form = /** @type {HTMLFormElement} */ (document.getElementById('setup-form'));
-const locationErrors = /** @type {HTMLUListElement} */ (document.getElementById('location-errors'));
+const locationLines = /** @type {HTMLOListElement} */ (document.getElementById('location-lines'));
+const locationsField = /** @type {HTMLTextAreaElement} */ (document.getElementById('locations'));
 const setupError = /** @type {HTMLParagraphElement} */ (document.getElementById('setup-error'));
 const stopList = /** @type {HTMLDivElement} */ (document.getElementById('stop-list'));
 const replan = /** @type {HTMLDivElement} */ (document.getElementById('replan'));
@@ -70,12 +72,43 @@ function saveField(field) {
 }
 
 /**
- * Shows the lines of the location list that couldn't be used.
+ * Shows the status of each line of the location list: ready to plan (with
+ * its label, and what an address matched), still to look up, or what's wrong.
  *
- * @param {import('./locations.js').ParsedLocationLine[]} invalidLines The lines to show.
+ * @param {import('./locations.js').ParsedLocationLine[]} lines The lines to show.
  */
-function showInvalidLines(invalidLines) {
-  locationErrors.replaceChildren(...invalidLines.map(({ lineNumber, result }) => element('li', '', `Line ${lineNumber}: ${result.error}`)));
+function showLines(lines) {
+  locationLines.replaceChildren(
+    ...lines.map(({ lineNumber, result }) => {
+      const item = element('li', 'flex gap-2 break-words');
+      let icon;
+      let status;
+      let text;
+      if (result.isValid) {
+        icon = element('span', 'text-accent-ink', '✓');
+        status = 'Ready';
+        const { label, matchedName } = result.location;
+        text = element('span', '', matchedName ? `Line ${lineNumber}: ${label} → ${matchedName}` : `Line ${lineNumber}: ${label}`);
+      } else if (result.query) {
+        icon = element('span', 'text-muted', '⌕');
+        status = 'To look up';
+        text = element('span', 'text-muted', `Line ${lineNumber}: "${result.query}" will be looked up when you press Plan route`);
+      } else {
+        icon = element('span', 'text-danger', '✗');
+        status = 'Problem';
+        text = element('span', 'text-danger', `Line ${lineNumber}: ${result.error}`);
+      }
+      icon.setAttribute('aria-hidden', 'true');
+      text.prepend(element('span', 'sr-only', `${status}: `));
+      item.append(icon, text);
+      return item;
+    }),
+  );
+}
+
+/** Shows the status of each line as typed, using only saved search results so typing never searches. */
+function previewLines() {
+  showLines(parseLocations(state.setup.locationsText, { searchResults: state.searchResults }));
 }
 
 /**
@@ -235,9 +268,16 @@ stopList.addEventListener('click', (event) => {
   }
 });
 
+/** Waits for a pause in typing before previewing the lines, so long lists stay responsive. */
+let previewTimer;
+
 form.addEventListener('input', (event) => {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
     saveField(event.target);
+  }
+  if (event.target === locationsField) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(previewLines, 250);
   }
 });
 
@@ -247,11 +287,13 @@ form.addEventListener('input', (event) => {
  * @param {import('./setup.js').SearchMatch[]} matches The matches.
  */
 function showMatches(matches) {
+  // Lines show their own matches, so only the Start and Finish fields are listed here.
+  const fieldMatches = matches.filter(({ source }) => !source.startsWith('Line '));
   locationMatchesList.replaceChildren(
-    ...matches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
+    ...fieldMatches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
   );
-  locationMatches.classList.toggle('hidden', matches.length === 0);
-  locationMatches.classList.toggle('flex', matches.length > 0);
+  locationMatches.classList.toggle('hidden', fieldMatches.length === 0);
+  locationMatches.classList.toggle('flex', fieldMatches.length > 0);
 }
 
 /**
@@ -301,7 +343,7 @@ async function planRoute(from) {
   try {
     const searchResults = await lookUpAddresses(from !== null);
     const result = planFromSetup({ setup: state.setup, settings: state.settings, now: Date.now(), doneKeys: state.doneKeys, from, searchResults });
-    showInvalidLines(result.invalidLines);
+    showLines(result.lines);
     showMatches(result.matches);
     showSetupError(result.error);
     if (result.plan) {
@@ -396,5 +438,6 @@ form.addEventListener('submit', (event) => {
 });
 
 fillForm();
+previewLines();
 showView(state.view);
 showPlan();
