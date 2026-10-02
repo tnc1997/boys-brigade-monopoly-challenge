@@ -1,3 +1,4 @@
+import { describeRoute, formatDuration } from './route.js';
 import { planFromSetup } from './setup.js';
 import { loadState, saveState } from './storage.js';
 
@@ -90,22 +91,89 @@ function showSetupError(error) {
   setupError.classList.toggle('hidden', error === null);
 }
 
-/** Shows the current plan. The full stop list comes in #13. */
+/**
+ * Creates a link that opens in a new tab.
+ *
+ * @param {string} href Where the link goes.
+ * @param {string} text The link's text.
+ * @param {string} label The link's accessible name, if it should say more than its text.
+ * @returns {HTMLAnchorElement} The link.
+ */
+function externalLink(href, text, label = text) {
+  const link = element(
+    'a',
+    'inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-700/30 hover:bg-emerald-50',
+    text,
+  );
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  if (label !== text) {
+    link.setAttribute('aria-label', label);
+  }
+  return link;
+}
+
+/**
+ * Creates the list item for a stop, or for the walk to the finish.
+ *
+ * @param {import('./route.js').RouteStop} stop The stop.
+ * @param {boolean} isFinish Whether this is the walk to the finish.
+ * @returns {HTMLLIElement} The list item.
+ */
+function stopItem(stop, isFinish) {
+  const item = element('li', 'flex gap-3 rounded-md p-3 ring-1 ring-slate-200');
+  const badge = element(
+    'span',
+    `flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${isFinish ? 'bg-slate-800 text-white' : 'bg-emerald-700 text-white'}`,
+    isFinish ? '🏁' : String(stop.number),
+  );
+  badge.setAttribute('aria-hidden', 'true');
+
+  const details = element('div', 'flex min-w-0 flex-1 flex-col gap-1');
+  const title = element('p', 'font-medium break-words', stop.location.label);
+  const timing = element(
+    'p',
+    'text-sm text-slate-600',
+    `${isFinish ? 'Finish · arrive' : 'ETA'} ${timeFormat.format(stop.arrivalTime)} · ${formatDuration(stop.walkSeconds)} walk`,
+  );
+  const links = element('div', 'mt-1 flex flex-wrap gap-2');
+  links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
+  if (stop.what3wordsUrl) {
+    links.append(externalLink(stop.what3wordsUrl, 'what3words', `${stop.location.label} in what3words`));
+  }
+  details.append(title, timing, links);
+  item.append(badge, details);
+  return item;
+}
+
+/** Shows the current plan as a list of stops, then any skipped locations. */
 function showPlan() {
   const { plan } = state;
-  if (!plan) {
+  // Plans saved before walk settings were kept with the plan can't be shown, so they need planning again.
+  if (!plan?.settings) {
     stopList.replaceChildren(element('p', 'text-sm text-slate-600', 'Add your locations above and press Plan route.'));
     return;
   }
-  const ending = plan.finish ? `at ${plan.finish.label}` : 'with the last selfie';
-  const summary = element(
-    'p',
-    'text-sm',
-    `Visiting ${plan.order.length} of ${plan.points.length} locations, ending ${ending} at ${timeFormat.format(plan.endEta)}.`,
-  );
-  const stops = element('ol', 'mt-2 list-decimal pl-6 text-sm');
-  stops.append(...plan.order.map((index) => element('li', '', plan.points[index].label)));
-  stopList.replaceChildren(summary, stops);
+  const route = describeRoute(plan);
+  const ending = route.finish ? `arriving at the finish at ${timeFormat.format(route.endEta)}` : `with the last selfie at ${timeFormat.format(route.endEta)}`;
+  const summary = element('p', 'text-sm', `Visiting ${route.stops.length} of ${plan.points.length} locations, ${ending}.`);
+
+  const stops = element('ol', 'mt-3 flex flex-col gap-2');
+  stops.setAttribute('aria-label', 'Stops in order');
+  stops.append(...route.stops.map((stop) => stopItem(stop, false)));
+  if (route.finish) {
+    stops.append(stopItem(route.finish, true));
+  }
+  const sections = [summary, stops];
+
+  if (route.skipped.length > 0) {
+    const heading = element('h3', 'mt-4 text-sm font-semibold', `Skipped (${route.skipped.length}): not enough time`);
+    const skipped = element('ul', 'mt-2 flex flex-col gap-1 text-sm text-slate-600');
+    skipped.append(...route.skipped.map((location) => element('li', '', location.label)));
+    sections.push(heading, skipped);
+  }
+  stopList.replaceChildren(...sections);
 }
 
 form.addEventListener('input', (event) => {

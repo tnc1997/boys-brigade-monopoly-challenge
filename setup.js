@@ -11,6 +11,7 @@ import { plan } from './planner.js';
  *   finish: import('./locations.js').Location | null,
  *   startTime: number,
  *   deadline: number,
+ *   settings: Pick<import('./storage.js').Settings, 'speedKmh' | 'detourFactor' | 'dwellSeconds' | 'safetyMarginSeconds'>,
  * }} SavedPlan
  */
 
@@ -90,20 +91,16 @@ export function planFromSetup({ setup, settings, now }) {
     return failure('Selfie time: Enter a time of 0 minutes or more.');
   }
 
-  const result = plan({
-    start: start.location,
-    points,
-    finish: finish?.location ?? null,
-    startTime,
-    deadline,
+  const planSettings = {
     speedKmh: settings.speedKmh,
     detourFactor: settings.detourFactor,
     dwellSeconds: settings.dwellSeconds,
     safetyMarginSeconds: settings.safetyMarginSeconds,
-  });
+  };
+  const result = plan({ start: start.location, points, finish: finish?.location ?? null, startTime, deadline, ...planSettings });
 
   return {
-    plan: { ...result, points, start: start.location, finish: finish?.location ?? null, startTime, deadline },
+    plan: { ...result, points, start: start.location, finish: finish?.location ?? null, startTime, deadline, settings: planSettings },
     error: null,
     invalidLines,
   };
