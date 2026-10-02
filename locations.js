@@ -6,7 +6,7 @@ import { parseWords } from './what3words.js';
  * @typedef {object} Location
  * @property {number} lat Latitude, from -90 to 90.
  * @property {number} lng Longitude, from -180 to 180.
- * @property {string} label What to call the location. Defaults to the place's name from a Google Maps link, the what3words address, or the coordinates.
+ * @property {string} label What to call the location. Defaults to the place's name from a Google Maps URL, the what3words address, or the coordinates.
  * @property {string | null} words The what3words address as `word.word.word`, or `null` if the line didn't have one.
  * @property {string} key A stable key for the location, from its coordinates, for remembering which selfies are done.
  */
@@ -29,27 +29,27 @@ import { parseWords } from './what3words.js';
 /** Coordinates as `lat,lng` in decimal degrees, with or without a space after the comma. */
 const COORDINATES = /(?<![\d.])(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)(?![\d.])/g;
 
-/** The same as {@link COORDINATES}, but for a whole value such as a link's `q` parameter. */
+/** The same as {@link COORDINATES}, but for a whole value such as a URL's `q` parameter. */
 const WHOLE_COORDINATES = /^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/;
 
-/** A what3words address, with or without the `///` prefix or a what3words.com or w3w.co link. */
+/** A what3words address, with or without the `///` prefix or a what3words.com or w3w.co URL. */
 const WORDS =
   /(?<=^|[\s,;|])(?:(?:https?:\/\/)?(?:www\.)?(?:what3words\.com|w3w\.co)\/|\/{1,3})?[\p{L}\p{M}]+\.[\p{L}\p{M}]+\.[\p{L}\p{M}]+(?=[\s,;|]|$)/giu;
 
-/** A Google Maps link, including short links, with or without `https://`. */
-const GOOGLE_MAPS_LINK =
+/** A Google Maps URL, including short URLs, with or without `https://`. */
+const GOOGLE_MAPS_URL =
   /(?<=^|\s)(?:https?:\/\/)?(?:(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)(?:[/?#]\S*)?(?=\s|$)/gi;
 
-/** The position of the pin in a Google Maps place link, as `!3d<lat>!4d<lng>`. */
+/** The position of the pin in a Google Maps place URL, as `!3d<lat>!4d<lng>`. */
 const PIN = /!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/;
 
-/** The centre of the map in a Google Maps link, as `@<lat>,<lng>`. */
+/** The centre of the map in a Google Maps URL, as `@<lat>,<lng>`. */
 const MAP_CENTRE = /\/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/;
 
-/** The place's name in a Google Maps place link, as `/maps/place/<name>/`. */
+/** The place's name in a Google Maps place URL, as `/maps/place/<name>/`. */
 const PLACE_NAME = /\/maps\/place\/([^/@]+)/;
 
-/** Google Maps link parameters that can hold the location's coordinates. */
+/** Google Maps URL parameters that can hold the location's coordinates. */
 const COORDINATE_PARAMETERS = ['q', 'query', 'destination', 'll'];
 
 /** Punctuation that separates the parts of a line, removed from the ends of the label. */
@@ -64,20 +64,20 @@ const SEPARATORS = /^[\s,;|–—-]+|[\s,;|–—-]+$/g;
  */
 
 /**
- * Gets the coordinates from a Google Maps link, without any network
+ * Gets the coordinates from a Google Maps URL, without any network
  * requests. The pin's position (`!3d…!4d…`) is preferred over the centre of
  * the map (`@lat,lng`), because the map can be scrolled away from the pin.
  *
- * @param {string} link The link as typed or pasted, with or without `https://`.
- * @returns {{ isValid: true, coordinates: CoordinatesText, placeName: string | null } | { isValid: false, error: string }} The coordinates and the place's name (for place links), or a message saying why they can't be read.
+ * @param {string} text The URL as typed or pasted, with or without `https://`.
+ * @returns {{ isValid: true, coordinates: CoordinatesText, placeName: string | null } | { isValid: false, error: string }} The coordinates and the place's name (for place URLs), or a message saying why they can't be read.
  * @example
- * parseGoogleMapsLink('https://www.google.com/maps?q=51.4545,-2.5879');
+ * parseGoogleMapsUrl('https://www.google.com/maps?q=51.4545,-2.5879');
  * // { isValid: true, coordinates: { lat: '51.4545', lng: '-2.5879' }, placeName: null }
  */
-export function parseGoogleMapsLink(link) {
+export function parseGoogleMapsUrl(text) {
   let url;
   try {
-    url = new URL(/^https?:\/\//i.test(link) ? link : `https://${link}`);
+    url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
   } catch {
     return { isValid: false, error: 'This Google Maps link is not a valid link. Paste the full link or the coordinates instead.' };
   }
@@ -119,7 +119,7 @@ export function parseGoogleMapsLink(link) {
 /**
  * Parses one line of the location list. The free what3words plan can't
  * convert addresses to coordinates, so a line must include the coordinates,
- * either as `lat,lng` or in a Google Maps link. It can also include a
+ * either as `lat,lng` or in a Google Maps URL. It can also include a
  * what3words address, kept so the stop can link to it, and a label (any
  * remaining text), in any order.
  *
@@ -130,20 +130,20 @@ export function parseGoogleMapsLink(link) {
  * // { isValid: true, location: { lat: 51.4545, lng: -2.5879, label: 'Old Kent Road', words: 'filled.count.soap', key: '51.454500,-2.587900' } }
  */
 export function parseLocation(line) {
-  // Links are read and removed first, because they can contain text that
+  // URLs are read and removed first, because they can contain text that
   // looks like coordinates or a what3words address (such as maps.google.com).
   /** @type {CoordinatesText[]} */
   const coordinates = [];
   let placeName = null;
   let rest = line;
-  for (const [link] of line.matchAll(GOOGLE_MAPS_LINK)) {
-    const parsedLink = parseGoogleMapsLink(link);
-    if (!parsedLink.isValid) {
-      return { isValid: false, error: parsedLink.error };
+  for (const [url] of line.matchAll(GOOGLE_MAPS_URL)) {
+    const parsedUrl = parseGoogleMapsUrl(url);
+    if (!parsedUrl.isValid) {
+      return { isValid: false, error: parsedUrl.error };
     }
-    coordinates.push(parsedLink.coordinates);
-    placeName ??= parsedLink.placeName;
-    rest = rest.replace(link, ' ');
+    coordinates.push(parsedUrl.coordinates);
+    placeName ??= parsedUrl.placeName;
+    rest = rest.replace(url, ' ');
   }
 
   const coordinateMatches = [...rest.matchAll(COORDINATES)];
