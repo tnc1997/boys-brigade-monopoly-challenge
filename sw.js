@@ -11,6 +11,9 @@
  * by the browser as usual: https://operations.osmfoundation.org/policies/tiles/
  */
 
+/** How long to wait for the network before using the saved copy of the app's files, in milliseconds. */
+const NETWORK_TIMEOUT_MS = 4000;
+
 /** Change this to replace every saved file, for example when the list below changes. */
 const CACHE_NAME = 'monopoly-challenge-planner-v1';
 
@@ -76,15 +79,26 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) {
     return;
   }
+  const network = fetch(request).then((response) => {
+    if (response.ok) {
+      const copy = response.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+    }
+    return response;
+  });
+  // Without a saved copy, opening the page falls back to the saved page;
+  // anything else fails as it would without the service worker.
+  const saved = () =>
+    caches
+      .match(request, { ignoreSearch: true })
+      .then((match) => match ?? (request.mode === 'navigate' ? caches.match('index.html') : undefined));
+  // With a weak signal the network can hang, so use the saved copy after a
+  // few seconds. The network request carries on and still refreshes it.
+  const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS)).then(saved);
+  event.waitUntil(network.catch(() => {}));
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      })
-      .catch(() => caches.match(request, { ignoreSearch: true }).then((saved) => saved ?? caches.match('index.html'))),
+    Promise.race([network, timeout.then((match) => match ?? network)])
+      .catch(saved)
+      .then((response) => response ?? Response.error()),
   );
 });
