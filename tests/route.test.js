@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { describeRoute, directionsUrl, formatDuration } from '../route.js';
+import { describeRoute, directionsUrl, formatDuration, progress, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -92,5 +92,34 @@ describe('describeRoute', () => {
     const { stops, skipped } = describeRoute(plan);
     assert.equal(stops.length, 0);
     assert.deepEqual(skipped.map(({ label }) => label), ['Old Kent Road', 'Temple Meads']);
+  });
+});
+
+describe('toggleDone', () => {
+  test('marks a location as done', () => {
+    assert.deepEqual(toggleDone(['a'], 'b'), ['a', 'b']);
+  });
+
+  test('un-marks a location that was done', () => {
+    assert.deepEqual(toggleDone(['a', 'b'], 'a'), ['b']);
+  });
+
+  test("doesn't change the original list", () => {
+    const doneKeys = ['a'];
+    toggleDone(doneKeys, 'b');
+    assert.deepEqual(doneKeys, ['a']);
+  });
+});
+
+describe('progress', () => {
+  test('counts the done locations out of every location in the list', () => {
+    const plan = savedPlan();
+    assert.deepEqual(progress(plan, []), { done: 0, total: 2 });
+    assert.deepEqual(progress(plan, [plan.points[0].key]), { done: 1, total: 2 });
+    assert.deepEqual(progress(plan, plan.points.map(({ key }) => key)), { done: 2, total: 2 });
+  });
+
+  test('ignores keys of locations that are not in the plan', () => {
+    assert.deepEqual(progress(savedPlan(), ['0.000000,0.000000']), { done: 0, total: 2 });
   });
 });
