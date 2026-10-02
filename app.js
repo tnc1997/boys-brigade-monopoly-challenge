@@ -17,6 +17,7 @@ const searchStatus = /** @type {HTMLParagraphElement} */ (document.getElementByI
 const locationMatches = /** @type {HTMLDivElement} */ (document.getElementById('location-matches'));
 const locationMatchesList = /** @type {HTMLUListElement} */ (document.getElementById('location-matches-list'));
 const planButton = /** @type {HTMLButtonElement} */ (form.querySelector('button[type="submit"]'));
+const tabs = /** @type {HTMLButtonElement[]} */ ([...document.querySelectorAll('[role="tab"][data-view]')]);
 
 /** The setup form's fields, which are bound to `state.setup` or `state.settings` by their data attributes. */
 const fields = /** @type {NodeListOf<HTMLInputElement | HTMLTextAreaElement>} */ (form.querySelectorAll('[data-setup], [data-setting]'));
@@ -98,7 +99,7 @@ function showSetupError(error) {
 function externalLink(href, text, label = text) {
   const link = element(
     'a',
-    'inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-emerald-800 ring-1 ring-emerald-700/30 hover:bg-emerald-50',
+    'inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft',
     text,
   );
   link.href = href;
@@ -120,7 +121,7 @@ function externalLink(href, text, label = text) {
 function doneToggle(location, isDone) {
   const toggle = element(
     'button',
-    `inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold ${isDone ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-white text-emerald-800 ring-1 ring-emerald-700 hover:bg-emerald-50'}`,
+    `inline-flex min-h-11 items-center rounded-md px-3 text-sm font-semibold ${isDone ? 'bg-accent text-white hover:bg-accent-strong' : 'bg-surface text-accent-ink ring-1 ring-accent hover:bg-accent-soft'}`,
     isDone ? '✓ Selfie done' : 'Mark selfie done',
   );
   toggle.type = 'button';
@@ -139,8 +140,8 @@ function doneToggle(location, isDone) {
  */
 function stopItem(stop, isFinish) {
   const isDone = !isFinish && state.doneKeys.includes(stop.location.key);
-  const item = element('li', `flex gap-3 rounded-md p-3 ring-1 ${isDone ? 'bg-emerald-50 ring-emerald-200' : 'ring-slate-200'}`);
-  const badgeColours = isFinish ? 'bg-slate-800 text-white' : isDone ? 'bg-emerald-200 text-emerald-900' : 'bg-emerald-700 text-white';
+  const item = element('li', `flex gap-3 rounded-md p-3 ring-1 ${isDone ? 'bg-accent-soft ring-accent-line' : 'ring-line'}`);
+  const badgeColours = isFinish ? 'bg-ink text-surface' : isDone ? 'bg-accent-line text-accent-ink' : 'bg-accent text-white';
   const badge = element(
     'span',
     `flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${badgeColours}`,
@@ -152,7 +153,7 @@ function stopItem(stop, isFinish) {
   const title = element('p', 'font-medium break-words', stop.location.label);
   const timing = element(
     'p',
-    'text-sm text-slate-600',
+    'text-sm text-muted',
     `${isFinish ? 'Finish · arrive' : 'ETA'} ${timeFormat.format(stop.arrivalTime)} · ${formatDuration(stop.walkSeconds)} walk`,
   );
   const links = element('div', 'mt-1 flex flex-wrap gap-2');
@@ -173,15 +174,20 @@ function showPlan() {
   replan.classList.toggle('hidden', !hasPlan);
   replan.classList.toggle('flex', hasPlan);
   if (!hasPlan) {
-    stopList.replaceChildren(element('p', 'text-sm text-slate-600', 'Add your locations above and press Plan route.'));
+    stopList.replaceChildren(element('p', 'text-sm text-muted', 'Add your locations above and press Plan route.'));
     return;
   }
   const route = describeRoute(plan);
   const ending = route.finish ? `arriving at the finish at ${timeFormat.format(route.endEta)}` : `with the last selfie at ${timeFormat.format(route.endEta)}`;
   const { done, total } = progress(plan, state.doneKeys);
-  const visiting = done === 0 ? `${route.stops.length} of ${total} locations` : `${route.stops.length} of ${total - done} locations still to do`;
+  // Count only stops still to visit, since a stop on this route may have
+  // been ticked off since it was planned.
+  const stopsToVisit = route.stops.filter(({ location }) => !state.doneKeys.includes(location.key)).length;
+  const remaining = total - done;
+  const locations = (count) => (count === 1 ? 'location' : 'locations');
+  const visiting = done === 0 ? `${stopsToVisit} of ${total} ${locations(total)}` : `${stopsToVisit} of ${remaining} ${locations(remaining)} still to do`;
   const summary = element('p', 'text-sm', `Visiting ${visiting}, ${ending}.`);
-  const counter = element('p', 'mt-1 text-sm font-semibold text-emerald-800', `Selfies done: ${done} of ${total}`);
+  const counter = element('p', 'mt-1 text-sm font-semibold text-accent-ink', `Selfies done: ${done} of ${total}`);
   counter.setAttribute('aria-live', 'polite');
 
   const stops = element('ol', 'mt-3 flex flex-col gap-2');
@@ -194,7 +200,7 @@ function showPlan() {
 
   if (route.skipped.length > 0) {
     const heading = element('h3', 'mt-4 text-sm font-semibold', `Skipped (${route.skipped.length}): not enough time`);
-    const skipped = element('ul', 'mt-2 flex flex-col gap-1 text-sm text-slate-600');
+    const skipped = element('ul', 'mt-2 flex flex-col gap-1 text-sm text-muted');
     skipped.append(...route.skipped.map((location) => element('li', '', location.label)));
     sections.push(heading, skipped);
   }
@@ -325,8 +331,8 @@ const GEOLOCATION_ERRORS = {
  */
 function showReplanStatus(message, isError) {
   replanStatus.textContent = message;
-  replanStatus.classList.toggle('text-red-700', isError);
-  replanStatus.classList.toggle('text-slate-600', !isError);
+  replanStatus.classList.toggle('text-danger', isError);
+  replanStatus.classList.toggle('text-muted', !isError);
 }
 
 replanButton.addEventListener('click', () => {
@@ -349,10 +355,46 @@ replanButton.addEventListener('click', () => {
   );
 });
 
+/**
+ * Shows a tab of the Route section and remembers the choice.
+ *
+ * @param {'list' | 'map'} view The tab to show.
+ * @param {boolean} [shouldFocus=false] Whether to move focus to the tab, as when choosing it with the arrow keys.
+ */
+function showView(view, shouldFocus = false) {
+  for (const tab of tabs) {
+    const isSelected = tab.dataset.view === view;
+    tab.setAttribute('aria-selected', String(isSelected));
+    tab.tabIndex = isSelected ? 0 : -1;
+    document.getElementById(tab.getAttribute('aria-controls')).hidden = !isSelected;
+    if (isSelected && shouldFocus) {
+      tab.focus();
+    }
+  }
+  if (state.view !== view) {
+    state.view = view;
+    saveState(state);
+  }
+}
+
+for (const tab of tabs) {
+  tab.addEventListener('click', () => showView(/** @type {'list' | 'map'} */ (tab.dataset.view)));
+  // Arrow keys, Home and End move between tabs, following the ARIA tabs pattern.
+  tab.addEventListener('keydown', (event) => {
+    const index = tabs.indexOf(tab);
+    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1 }[event.key];
+    if (next !== undefined) {
+      event.preventDefault();
+      showView(/** @type {'list' | 'map'} */ (tabs[(next + tabs.length) % tabs.length].dataset.view), true);
+    }
+  });
+}
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   planRoute(null);
 });
 
 fillForm();
+showView(state.view);
 showPlan();

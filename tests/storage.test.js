@@ -76,6 +76,13 @@ describe('storage', () => {
     assert.equal(state.plan, null);
   });
 
+  test('only accepts list or map as the view', () => {
+    for (const [view, expected] of [['map', 'map'], ['list', 'list'], ['table', 'list'], [undefined, 'list']]) {
+      const storage = memoryStorage({ [STORAGE_KEY]: JSON.stringify({ version: SCHEMA_VERSION, view }) });
+      assert.equal(loadState(storage).view, expected, String(view));
+    }
+  });
+
   test('keeps working when storage throws', () => {
     assert.deepEqual(loadState(throwingStorage), defaultState());
     assert.equal(saveState(defaultState(), throwingStorage), false);

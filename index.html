@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scheme-light-dark">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,21 +8,21 @@
     <link rel="stylesheet" href="styles.css">
     <script type="module" src="app.js"></script>
   </head>
-  <body class="min-h-dvh overflow-x-hidden bg-slate-50 text-slate-900 antialiased">
-    <header class="bg-emerald-700 text-white">
+  <body class="min-h-dvh overflow-x-hidden bg-page text-ink antialiased">
+    <header class="bg-accent text-white">
       <div class="mx-auto max-w-xl px-4 py-3">
         <h1 class="text-lg font-semibold">Monopoly Challenge Planner</h1>
-        <p class="text-sm text-emerald-100">Boys' Brigade · Bristol</p>
+        <p class="text-sm text-white/80">Boys' Brigade · Bristol</p>
       </div>
     </header>
 
     <main class="mx-auto flex max-w-xl flex-col gap-4 px-4 py-4">
-      <section id="setup" aria-labelledby="setup-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <section id="setup" aria-labelledby="setup-heading" class="rounded-lg bg-surface p-4 shadow-sm ring-1 ring-line">
         <h2 id="setup-heading" class="text-base font-semibold">Setup</h2>
         <form id="setup-form" class="mt-3 flex flex-col gap-4" novalidate>
           <div class="flex flex-col gap-1">
             <label for="locations" class="text-sm font-medium">Locations</label>
-            <p id="locations-hint" class="text-xs text-slate-600">
+            <p id="locations-hint" class="text-xs text-muted">
               One per line, each with its coordinates (like <code>51.4545,-2.5879</code>), a full Google Maps link, or an address or place name to look up.
               To label an address, put the label first with a colon, like <code>Old Kent Road: Queen Square, Bristol</code>.
               For a what3words address, tap Navigate in the what3words app and paste the address it gives instead.
@@ -31,12 +31,12 @@
             </p>
             <textarea id="locations" data-setup="locationsText" rows="8" aria-describedby="locations-hint" spellcheck="false" autocapitalize="off"
               placeholder="Old Kent Road 51.4545,-2.5879"
-              class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-mono text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30"></textarea>
-            <p id="search-status" class="hidden text-sm text-slate-600" role="status"></p>
-            <ul id="location-errors" class="flex flex-col gap-1 text-sm text-red-700" aria-live="polite"></ul>
+              class="w-full rounded-md border border-field bg-surface px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"></textarea>
+            <p id="search-status" class="hidden text-sm text-muted" role="status"></p>
+            <ul id="location-errors" class="flex flex-col gap-1 text-sm text-danger" aria-live="polite"></ul>
             <div id="location-matches" class="hidden flex-col gap-1">
-              <p class="text-sm font-medium">Looked up <span class="font-normal text-slate-600">(check these are the right places)</span></p>
-              <ul id="location-matches-list" class="flex flex-col gap-1 text-sm text-slate-700"></ul>
+              <p class="text-sm font-medium">Looked up <span class="font-normal text-muted">(check these are the right places)</span></p>
+              <ul id="location-matches-list" class="flex flex-col gap-1 text-sm text-ink"></ul>
             </div>
           </div>
 
@@ -44,59 +44,72 @@
             <div class="flex flex-col gap-1">
               <label for="start" class="text-sm font-medium">Start</label>
               <input id="start" data-setup="startText" type="text" autocapitalize="off" spellcheck="false"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
             <div class="flex flex-col gap-1">
-              <label for="finish" class="text-sm font-medium">Finish <span class="font-normal text-slate-600">(optional)</span></label>
+              <label for="finish" class="text-sm font-medium">Finish <span class="font-normal text-muted">(optional)</span></label>
               <input id="finish" data-setup="finishText" type="text" autocapitalize="off" spellcheck="false" placeholder="Leave blank if there's no finish"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
             <div class="flex flex-col gap-1">
-              <label for="start-time" class="text-sm font-medium">Start time <span class="font-normal text-slate-600">(blank for now)</span></label>
+              <label for="start-time" class="text-sm font-medium">Start time <span class="font-normal text-muted">(blank for now)</span></label>
               <input id="start-time" data-setup="startTimeText" type="time"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
             <div class="flex flex-col gap-1">
               <label for="deadline" class="text-sm font-medium">Deadline</label>
               <input id="deadline" data-setting="deadline" type="time"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
             <div class="flex flex-col gap-1">
-              <label for="speed" class="text-sm font-medium">Walking speed <span class="font-normal text-slate-600">(km/h)</span></label>
+              <label for="speed" class="text-sm font-medium">Walking speed <span class="font-normal text-muted">(km/h)</span></label>
               <input id="speed" data-setting="speedKmh" data-number type="number" inputmode="decimal" min="1" max="8" step="0.1"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
             <div class="flex flex-col gap-1">
-              <label for="selfie-time" class="text-sm font-medium">Selfie time <span class="font-normal text-slate-600">(minutes per stop)</span></label>
+              <label for="selfie-time" class="text-sm font-medium">Selfie time <span class="font-normal text-muted">(minutes per stop)</span></label>
               <input id="selfie-time" data-setting="dwellSeconds" data-number data-scale="60" type="number" inputmode="decimal" min="0" max="30" step="0.5"
-                class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/30">
+                class="w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
             </div>
           </div>
 
-          <p id="setup-error" class="hidden rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 ring-1 ring-red-200" role="alert"></p>
+          <p id="setup-error" class="hidden rounded-md bg-danger-soft px-3 py-2 text-sm text-danger ring-1 ring-danger-line" role="alert"></p>
 
-          <button type="submit" class="min-h-11 rounded-md bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-60">
+          <button type="submit" class="min-h-11 rounded-md bg-accent px-4 py-2 font-semibold text-white hover:bg-accent-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-60">
             Plan route
           </button>
         </form>
       </section>
 
-      <section id="stops" aria-labelledby="stops-heading" class="rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <section id="stops" aria-labelledby="stops-heading" class="rounded-lg bg-surface p-4 shadow-sm ring-1 ring-line">
         <h2 id="stops-heading" class="text-base font-semibold">Route</h2>
         <div id="replan" class="mt-3 hidden flex-col gap-2">
-          <button id="replan-button" type="button" class="min-h-11 rounded-md bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 disabled:opacity-60">
+          <button id="replan-button" type="button" class="min-h-11 rounded-md bg-accent px-4 py-2 font-semibold text-white hover:bg-accent-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-60">
             Re-plan from here
           </button>
-          <p id="replan-status" class="text-sm text-slate-600" role="status">Uses your current location and time, and the locations still to visit.</p>
+          <p id="replan-status" class="text-sm text-muted" role="status">Uses your current location and time, and the locations still to visit.</p>
         </div>
-        <div id="stop-list" class="mt-3">
-          <p class="text-sm text-slate-600">Add your locations above and press Plan route.</p>
+        <div role="tablist" aria-label="Route view" class="mt-3 grid grid-cols-2 gap-1 rounded-md bg-page p-1 ring-1 ring-line">
+          <button id="list-tab" type="button" role="tab" data-view="list" aria-controls="stop-list" aria-selected="true"
+            class="min-h-11 rounded px-3 text-sm font-semibold text-muted aria-selected:bg-surface aria-selected:text-ink aria-selected:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            List
+          </button>
+          <button id="map-tab" type="button" role="tab" data-view="map" aria-controls="map-panel" aria-selected="false" tabindex="-1"
+            class="min-h-11 rounded px-3 text-sm font-semibold text-muted aria-selected:bg-surface aria-selected:text-ink aria-selected:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Map
+          </button>
+        </div>
+        <div id="stop-list" role="tabpanel" aria-labelledby="list-tab" class="mt-3">
+          <p class="text-sm text-muted">Add your locations above and press Plan route.</p>
+        </div>
+        <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" class="mt-3" hidden>
+          <p class="text-sm text-muted">The map of your route will appear here.</p>
         </div>
       </section>
     </main>
 
     <noscript>
-      <p class="mx-auto max-w-xl px-4 pb-4 text-sm text-red-700">This planner needs JavaScript to work.</p>
+      <p class="mx-auto max-w-xl px-4 pb-4 text-sm text-danger">This planner needs JavaScript to work.</p>
     </noscript>
   </body>
 </html>

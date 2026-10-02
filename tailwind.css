@@ -1,1 +1,58 @@
 @import "tailwindcss";
+
+/*
+ * Colour tokens, used as Tailwind colours (e.g. bg-surface, text-muted).
+ * Each points at a theme variable that switches with the system theme.
+ */
+@theme inline {
+  --color-page: var(--theme-page);
+  --color-surface: var(--theme-surface);
+  --color-ink: var(--theme-ink);
+  --color-muted: var(--theme-muted);
+  --color-line: var(--theme-line);
+  --color-field: var(--theme-field);
+  --color-accent: var(--theme-accent);
+  --color-accent-strong: var(--theme-accent-strong);
+  --color-accent-ink: var(--theme-accent-ink);
+  --color-accent-soft: var(--theme-accent-soft);
+  --color-accent-line: var(--theme-accent-line);
+  --color-danger: var(--theme-danger);
+  --color-danger-soft: var(--theme-danger-soft);
+  --color-danger-line: var(--theme-danger-line);
+}
+
+:root {
+  --theme-page: var(--color-slate-50);
+  --theme-surface: var(--color-white);
+  --theme-ink: var(--color-slate-900);
+  --theme-muted: var(--color-slate-600);
+  --theme-line: var(--color-slate-200);
+  --theme-field: var(--color-slate-300);
+  --theme-accent: var(--color-emerald-700);
+  --theme-accent-strong: var(--color-emerald-800);
+  --theme-accent-ink: var(--color-emerald-800);
+  --theme-accent-soft: var(--color-emerald-50);
+  --theme-accent-line: var(--color-emerald-200);
+  --theme-danger: var(--color-red-700);
+  --theme-danger-soft: var(--color-red-50);
+  --theme-danger-line: var(--color-red-200);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --theme-page: var(--color-slate-950);
+    --theme-surface: var(--color-slate-900);
+    --theme-ink: var(--color-slate-100);
+    --theme-muted: var(--color-slate-400);
+    --theme-line: var(--color-slate-700);
+    --theme-field: var(--color-slate-600);
+    --theme-accent: var(--color-emerald-700);
+    --theme-accent-strong: var(--color-emerald-800);
+    --theme-accent-ink: var(--color-emerald-300);
+    --theme-accent-soft: var(--color-emerald-950);
+    --theme-accent-line: var(--color-emerald-800);
+    --theme-danger: var(--color-red-400);
+    --theme-danger-soft: var(--color-red-950);
+    --theme-danger-line: var(--color-red-900);
+  }
+}
