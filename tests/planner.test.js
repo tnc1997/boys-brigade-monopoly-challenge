@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { evaluateRoute, greedyInsertion, haversineMetres, plan, walkSeconds } from '../planner.js';
+import { evaluateRoute, greedyInsertion, haversineMetres, improveWithTwoOpt, plan, walkSeconds } from '../planner.js';
 
 const castlePark = { lat: 51.4556, lng: -2.5894 };
 const cliftonSuspensionBridge = { lat: 51.4549, lng: -2.6278 };
@@ -314,5 +314,125 @@ describe('plan', () => {
 
   test('rejects invalid walking settings', () => {
     assert.throws(() => plan({ ...base, points: [kmNorth(1)], speedKmh: 0 }), RangeError);
+  });
+});
+
+describe('improveWithTwoOpt', () => {
+  // Points walked at 3.6 km/h (1 m/s) with no detour, so each kilometre takes
+  // exactly 1000 s.
+  const kmFrom = (northKm, eastKm = 0) => ({
+    lat: castlePark.lat + (northKm * 1000) / 111195,
+    lng: castlePark.lng + (eastKm * 1000) / (111195 * Math.cos((castlePark.lat * Math.PI) / 180)),
+  });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const base = {
+    start: castlePark,
+    startTime,
+    deadline: Date.parse('2026-10-03T16:00:00+01:00'),
+    speedKmh: 3.6,
+    detourFactor: 1,
+    dwellSeconds: 100,
+    safetyMarginSeconds: 600,
+  };
+  const seconds = (options, order) => {
+    const { endEta } = evaluateRoute({ ...options, stops: order.map((index) => options.points[index]) });
+    return (endEta - options.startTime) / 1000;
+  };
+  const random = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  test('uncrosses a crossing route', () => {
+    // A square 1 km north and east of the start, back to a finish at the
+    // start. Visiting the corners as 0, 2, 1, 3 crosses over itself.
+    const points = [kmFrom(1, 0), kmFrom(1, 1), kmFrom(2, 1), kmFrom(2, 0)];
+    const options = { ...base, points, finish: castlePark };
+    const crossing = [0, 2, 1, 3];
+    const improved = improveWithTwoOpt(options, crossing);
+    // Compare with the best of every order of the four corners.
+    const permutations = (items) =>
+      items.length <= 1 ? [items] : items.flatMap((item, index) => permutations(items.filter((_, other) => other !== index)).map((rest) => [item, ...rest]));
+    const best = Math.min(...permutations([0, 1, 2, 3]).map((order) => seconds(options, order)));
+    assert.ok(seconds(options, improved) < seconds(options, crossing) - 100);
+    assert.ok(Math.abs(seconds(options, improved) - best) < 1e-6, `${seconds(options, improved)} vs best ${best}`);
+  });
+
+  test('reverses the tail when there is no finish', () => {
+    // Visiting the far point first means walking back past the near one.
+    const options = { ...base, points: [kmFrom(1), kmFrom(3)] };
+    assert.deepEqual(improveWithTwoOpt(options, [1, 0]), [0, 1]);
+  });
+
+  test("doesn't reverse the tail when there is a finish", () => {
+    // With a finish 4 km north, near then far is quicker once the walk to
+    // the finish is counted, so the order changes.
+    const withFinish = { ...base, points: [kmFrom(1), kmFrom(3)], finish: kmFrom(4) };
+    assert.deepEqual(improveWithTwoOpt(withFinish, [1, 0]), [0, 1]);
+    // With the finish back at the start, both directions take the same time,
+    // so the order is left alone.
+    const outAndBack = { ...base, points: [kmFrom(1), kmFrom(3)], finish: castlePark };
+    assert.deepEqual(improveWithTwoOpt(outAndBack, [1, 0]), [1, 0]);
+  });
+
+  test('leaves an empty or one-stop route alone', () => {
+    assert.deepEqual(improveWithTwoOpt({ ...base, points: [] }, []), []);
+    assert.deepEqual(improveWithTwoOpt({ ...base, points: [kmFrom(1)] }, [0]), [0]);
+  });
+
+  test('never makes a route slower or changes which points it visits, on random routes', () => {
+    const next = random(7);
+    for (let run = 0; run < 200; run += 1) {
+      const points = Array.from({ length: 2 + Math.floor(next() * 20) }, () => kmFrom(next() * 6 - 3, next() * 6 - 3));
+      const finish = next() < 0.5 ? null : kmFrom(next() * 6 - 3, next() * 6 - 3);
+      const options = { ...base, points, finish };
+      const order = points.map((_, index) => index).sort(() => next() - 0.5);
+      const improved = improveWithTwoOpt(options, order);
+      assert.deepEqual([...improved].sort((a, b) => a - b), [...order].sort((a, b) => a - b), `run ${run} changed the points`);
+      assert.ok(seconds(options, improved) <= seconds(options, order) + 1e-6, `run ${run} got slower`);
+    }
+  });
+});
+
+describe('plan with 2-opt', () => {
+  const kmFrom = (northKm, eastKm = 0) => ({
+    lat: castlePark.lat + (northKm * 1000) / 111195,
+    lng: castlePark.lng + (eastKm * 1000) / (111195 * Math.cos((castlePark.lat * Math.PI) / 180)),
+  });
+  const startTime = Date.parse('2026-10-03T11:00:00+01:00');
+  const random = (seed) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  test('visits at least as many points as greedy insertion and stays within budget, on random routes', () => {
+    const next = random(11);
+    let extraPoints = 0;
+    for (let run = 0; run < 200; run += 1) {
+      const points = Array.from({ length: 5 + Math.floor(next() * 30) }, () => kmFrom(next() * 6 - 3, next() * 6 - 3));
+      const finish = next() < 0.5 ? null : kmFrom(next() * 6 - 3, next() * 6 - 3);
+      const options = {
+        start: castlePark,
+        points,
+        finish,
+        startTime,
+        deadline: startTime + (3000 + next() * 15000 + 600) * 1000,
+        speedKmh: 3.6,
+        detourFactor: 1,
+        dwellSeconds: 100,
+        safetyMarginSeconds: 600,
+      };
+      const greedy = greedyInsertion(options);
+      const result = plan(options);
+      assert.ok(result.order.length >= greedy.length, `run ${run} visits fewer points`);
+      assert.ok(result.spareSeconds >= 0 || result.order.length === 0, `run ${run} is over budget`);
+      extraPoints += result.order.length - greedy.length;
+    }
+    // 2-opt frees up time on some routes, which is used for more points.
+    assert.ok(extraPoints > 0, 'expected 2-opt to fit extra points on some routes');
   });
 });

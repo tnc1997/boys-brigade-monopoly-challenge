@@ -163,7 +163,49 @@ export function evaluateRoute({
  *   deadline: Date.parse('2026-10-03T16:00:00+01:00'),
  * }); // [1, 0]
  */
-export function greedyInsertion({
+export function greedyInsertion(options) {
+  const context = routeContext(options);
+  return toIndexes(insertGreedily([], context));
+}
+
+/**
+ * Improves a route with 2-opt: it reverses sections of the route wherever
+ * that makes it quicker, until no reversal helps. Without a finish, the end
+ * of the route isn't fixed, so it can also reverse the whole tail of the
+ * route. It never makes the route slower or adds or removes points.
+ *
+ * @param {PlanOptions} options The candidate points and the settings to plan with.
+ * @param {number[]} order Indexes into `points`, in visiting order.
+ * @returns {number[]} The same indexes, in an order that's no slower.
+ * @example
+ * // Points at the corners of a square, visited in a crossing order.
+ * improveWithTwoOpt(options, [0, 2, 1, 3]); // [0, 1, 2, 3]
+ */
+export function improveWithTwoOpt(options, order) {
+  const context = routeContext(options);
+  return toIndexes(twoOpt(order.map((index) => index + 1), context));
+}
+
+/**
+ * The walking times and limits used while planning.
+ *
+ * @typedef {object} RouteContext
+ * @property {number[][]} walk Walking time in seconds between every pair of nodes.
+ * @property {number} startNode The node for the start (always 0). Point `i` is node `i + 1`.
+ * @property {number | null} finishNode The node for the finish, or `null` if there's no finish.
+ * @property {number} pointCount How many candidate points there are.
+ * @property {number} dwellSeconds Time spent at each stop taking the selfie, in seconds.
+ * @property {number} budgetSeconds Time available for the route, in seconds.
+ */
+
+/**
+ * Works out the walking times between every pair of places once, so
+ * planning doesn't recalculate them.
+ *
+ * @param {PlanOptions} options The candidate points and the settings to plan with.
+ * @returns {RouteContext} The walking times and limits.
+ */
+function routeContext({
   start,
   points,
   finish = null,
@@ -176,40 +218,115 @@ export function greedyInsertion({
 }) {
   // Nodes are the start, then each point, then the finish (if there is one).
   const nodes = [start, ...points, ...(finish ? [finish] : [])];
-  const walk = nodes.map((a) => nodes.map((b) => walkSeconds(a, b, { speedKmh, detourFactor })));
-  const startNode = 0;
-  const finishNode = finish ? nodes.length - 1 : null;
-  const budgetSeconds = (deadline - startTime) / 1000 - safetyMarginSeconds;
+  return {
+    walk: nodes.map((a) => nodes.map((b) => walkSeconds(a, b, { speedKmh, detourFactor }))),
+    startNode: 0,
+    finishNode: finish ? nodes.length - 1 : null,
+    pointCount: points.length,
+    dwellSeconds,
+    budgetSeconds: (deadline - startTime) / 1000 - safetyMarginSeconds,
+  };
+}
 
-  // The route holds point nodes (1 to points.length) in visiting order.
-  const route = [];
-  let routeSeconds = finishNode === null ? 0 : walk[startNode][finishNode];
-  const unvisited = new Set(points.map((_, index) => index + 1));
+/**
+ * Converts point nodes back to indexes into `points`.
+ *
+ * @param {number[]} route Point nodes in visiting order.
+ * @returns {number[]} Indexes into `points`.
+ */
+const toIndexes = (route) => route.map((node) => node - 1);
+
+/**
+ * Works out how long a route takes, from the start to the finish (or the
+ * last selfie if there's no finish).
+ *
+ * @param {number[]} route Point nodes in visiting order.
+ * @param {RouteContext} context The walking times and limits.
+ * @returns {number} The time in seconds.
+ */
+function routeSeconds(route, { walk, startNode, finishNode, dwellSeconds }) {
+  let seconds = route.length * dwellSeconds;
+  let previous = startNode;
+  for (const node of route) {
+    seconds += walk[previous][node];
+    previous = node;
+  }
+  return finishNode === null ? seconds : seconds + walk[previous][finishNode];
+}
+
+/**
+ * Adds unvisited points to a route by greedy insertion, for as long as the
+ * route still fits the time budget.
+ *
+ * @param {number[]} route Point nodes already in the route, in visiting order. This isn't changed.
+ * @param {RouteContext} context The walking times and limits.
+ * @returns {number[]} The route with the points that fit added.
+ */
+function insertGreedily(route, context) {
+  const { walk, startNode, finishNode, pointCount, dwellSeconds, budgetSeconds } = context;
+  const result = [...route];
+  let seconds = routeSeconds(result, context);
+  const unvisited = new Set(Array.from({ length: pointCount }, (_, index) => index + 1).filter((node) => !result.includes(node)));
 
   while (unvisited.size > 0) {
     let best = null;
     for (const node of unvisited) {
-      for (let position = 0; position <= route.length; position += 1) {
-        const previous = position === 0 ? startNode : route[position - 1];
-        const next = position === route.length ? finishNode : route[position];
+      for (let position = 0; position <= result.length; position += 1) {
+        const previous = position === 0 ? startNode : result[position - 1];
+        const next = position === result.length ? finishNode : result[position];
         const addedSeconds =
-          dwellSeconds +
-          walk[previous][node] +
-          (next === null ? 0 : walk[node][next] - walk[previous][next]);
+          dwellSeconds + walk[previous][node] + (next === null ? 0 : walk[node][next] - walk[previous][next]);
         if (best === null || addedSeconds < best.addedSeconds) {
           best = { node, position, addedSeconds };
         }
       }
     }
-    if (routeSeconds + best.addedSeconds > budgetSeconds) {
+    if (seconds + best.addedSeconds > budgetSeconds) {
       break;
     }
-    route.splice(best.position, 0, best.node);
-    routeSeconds += best.addedSeconds;
+    result.splice(best.position, 0, best.node);
+    seconds += best.addedSeconds;
     unvisited.delete(best.node);
   }
+  return result;
+}
 
-  return route.map((node) => node - 1);
+/** Smallest saving in seconds that counts as an improvement, so rounding errors can't loop forever. */
+const IMPROVEMENT_SECONDS = 1e-6;
+
+/**
+ * Improves a route with 2-opt. Walking times are the same in both
+ * directions, so reversing a section only changes the walks at its two ends.
+ *
+ * @param {number[]} route Point nodes in visiting order. This isn't changed.
+ * @param {RouteContext} context The walking times and limits.
+ * @returns {number[]} The improved route.
+ */
+function twoOpt(route, { walk, startNode, finishNode }) {
+  const result = [...route];
+  let isImproved = true;
+  while (isImproved) {
+    isImproved = false;
+    for (let i = 0; i < result.length - 1; i += 1) {
+      for (let j = i + 1; j < result.length; j += 1) {
+        const before = i === 0 ? startNode : result[i - 1];
+        const after = j === result.length - 1 ? finishNode : result[j + 1];
+        // Reversing result[i..j] replaces the walks before → result[i] and
+        // result[j] → after with before → result[j] and result[i] → after.
+        // Without a finish, reversing the tail (after === null) only changes
+        // the first of those walks.
+        const savedSeconds =
+          walk[before][result[i]] -
+          walk[before][result[j]] +
+          (after === null ? 0 : walk[result[j]][after] - walk[result[i]][after]);
+        if (savedSeconds > IMPROVEMENT_SECONDS) {
+          result.splice(i, j - i + 1, ...result.slice(i, j + 1).reverse());
+          isImproved = true;
+        }
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -242,7 +359,18 @@ export function greedyInsertion({
  * skipped; // []
  */
 export function plan(options) {
-  const order = greedyInsertion(options);
+  // Build a route greedily, then shorten it with 2-opt and use any time that
+  // frees up for more points, until neither changes the route.
+  const context = routeContext(options);
+  let route = insertGreedily([], context);
+  for (;;) {
+    const improved = insertGreedily(twoOpt(route, context), context);
+    if (improved.length === route.length && routeSeconds(improved, context) >= routeSeconds(route, context) - IMPROVEMENT_SECONDS) {
+      break;
+    }
+    route = improved;
+  }
+  const order = toIndexes(route);
   const { arrivalTimes, endEta, spareSeconds } = evaluateRoute({
     ...options,
     stops: order.map((index) => options.points[index]),
