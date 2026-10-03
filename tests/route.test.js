@@ -64,10 +64,13 @@ describe('describeRoute', () => {
     assert.deepEqual(stops.map(({ number }) => number), [1, 2]);
     assert.deepEqual(stops.map(({ location }) => location.label), plan.order.map((index) => plan.points[index].label));
     assert.deepEqual(stops.map(({ arrivalTime }) => arrivalTime), plan.arrivalTimes);
+    // Each stop's directions go to that stop's own coordinates.
+    const coordinates = { 'Old Kent Road': '51.454500,-2.587900', 'Temple Meads': '51.449200,-2.581300' };
     for (const stop of stops) {
       assert.ok(stop.walkSeconds > 0);
-      assert.equal(stop.googleMapsDirectionsUrl, googleMapsDirectionsUrl(stop.location));
-      assert.equal(stop.appleMapsDirectionsUrl, appleMapsDirectionsUrl(stop.location));
+      const expected = coordinates[stop.location.label];
+      assert.equal(new URL(stop.googleMapsDirectionsUrl).searchParams.get('destination'), expected, stop.location.label);
+      assert.equal(stop.appleMapsDirectionsUrl, `https://maps.apple.com/?daddr=${expected}&dirflg=w`, stop.location.label);
     }
   });
 
@@ -94,8 +97,8 @@ describe('describeRoute', () => {
     assert.equal(finish.location.label, 'Finish');
     assert.equal(finish.arrivalTime, endEta);
     assert.ok(finish.walkSeconds > 0);
-    assert.equal(finish.googleMapsDirectionsUrl, googleMapsDirectionsUrl(finish.location));
-    assert.equal(finish.appleMapsDirectionsUrl, appleMapsDirectionsUrl(finish.location));
+    assert.equal(new URL(finish.googleMapsDirectionsUrl).searchParams.get('destination'), '51.455600,-2.589400');
+    assert.equal(finish.appleMapsDirectionsUrl, 'https://maps.apple.com/?daddr=51.455600,-2.589400&dirflg=w');
   });
 
   test('lists the skipped locations in list order', () => {
