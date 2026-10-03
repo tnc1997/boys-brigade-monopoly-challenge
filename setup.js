@@ -12,7 +12,9 @@ import { plan } from './planner.js';
  *   startTime: number,
  *   deadline: number,
  *   settings: Pick<import('./storage.js').Settings, 'speedKmh' | 'detourFactor' | 'dwellSeconds' | 'safetyMarginSeconds'>,
+ *   isFromPosition: boolean,
  * }} SavedPlan
+ * `isFromPosition` is whether the plan starts from the team's position (Re-plan from here) rather than the Start field.
  */
 
 /**
@@ -154,6 +156,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
       startTime,
       deadline,
       settings: planSettings,
+      isFromPosition: from !== null,
     },
     error: null,
     lines,

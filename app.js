@@ -105,8 +105,13 @@ function saveField(field) {
     state.settings[field.dataset.setting] = field.value;
   }
   saveState(state);
-  showSettingsSummary();
-  showCountdown();
+  // Only settings affect the summary, and only the deadline the countdown.
+  if (field.dataset.setting) {
+    showSettingsSummary();
+  }
+  if (field.dataset.setting === 'deadline') {
+    showCountdown();
+  }
 }
 
 /**
@@ -662,8 +667,11 @@ function showSettingsSpeed(speedKmh) {
   }
 }
 
-speedSlider.min = String(SPEED_RANGE.min);
-speedSlider.max = String(SPEED_RANGE.max);
+// The setup form's speed field uses the slider's range too.
+for (const input of [speedSlider, document.getElementById('speed')]) {
+  input.min = String(SPEED_RANGE.min);
+  input.max = String(SPEED_RANGE.max);
+}
 speedSlider.step = String(SPEED_RANGE.step);
 speedPresets.replaceChildren(
   ...SPEED_PRESETS.map(({ name, speedKmh }) => {
@@ -675,13 +683,30 @@ speedPresets.replaceChildren(
     button.type = 'button';
     button.dataset.preset = name;
     button.append(element('span', 'text-xs font-normal', `${speedKmh} km/h`));
-    button.addEventListener('click', () => showSettingsSpeed(speedKmh));
+    button.addEventListener('click', () => {
+      isSpeedChanged = true;
+      showSettingsSpeed(speedKmh);
+    });
     return button;
   }),
 );
-speedSlider.addEventListener('input', () => showSettingsSpeed(Number(speedSlider.value)));
+speedSlider.addEventListener('input', () => {
+  isSpeedChanged = true;
+  showSettingsSpeed(Number(speedSlider.value));
+});
+
+/**
+ * Whether the walking speed has been changed in the settings panel since it
+ * opened. A speed outside the slider's range can't be shown on it, so the
+ * speed is only saved when it's changed here.
+ */
+let isSpeedChanged = false;
 
 settingsButton.addEventListener('click', () => {
+  isSpeedChanged = false;
+  // Escape and the back button close the panel without changing
+  // returnValue, so clear it to stop an earlier Save applying again.
+  settingsDialog.returnValue = '';
   // The setup form's speed field can be empty, which saves NaN.
   showSettingsSpeed(Number.isFinite(state.settings.speedKmh) ? state.settings.speedKmh : defaultState().settings.speedKmh);
   for (const field of panelFields) {
@@ -704,7 +729,9 @@ settingsDialog.addEventListener('close', () => {
   if (settingsDialog.returnValue !== 'save') {
     return;
   }
-  state.settings.speedKmh = Number(speedSlider.value);
+  if (isSpeedChanged) {
+    state.settings.speedKmh = Number(speedSlider.value);
+  }
   // The fields are required and range-checked, so the dialog only closes
   // with "save" when they're valid.
   for (const field of panelFields) {
@@ -720,9 +747,14 @@ settingsDialog.addEventListener('close', () => {
   fillForm();
   showSettingsSummary();
   showCountdown();
-  // Re-plan with the new settings, keeping ticks, if there's a route to change.
+  // Re-plan with the new settings, keeping ticks, the same way the current
+  // route was planned: from the team's position, or from the Start field.
   if (state.plan?.settings) {
-    requestReplan();
+    if (state.plan.isFromPosition) {
+      requestReplan();
+    } else {
+      planRoute(null);
+    }
   }
 });
 
