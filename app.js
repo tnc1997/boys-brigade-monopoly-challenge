@@ -1,6 +1,6 @@
-import { countdownText, describeRoute, formatDuration, isAppleDevice, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from './route.js';
+import { countdownText, describeRoute, formatDuration, isAppleDevice, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
-import { parseLocations } from './locations.js';
+import { addLocationLine, parseLocations, pinLine } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
 import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from './setup.js';
@@ -55,12 +55,29 @@ const countdownDeadline = /** @type {HTMLSpanElement} */ (document.getElementByI
 const panelFields = /** @type {NodeListOf<HTMLInputElement>} */ (settingsDialog.querySelectorAll('[data-panel-setting], [data-panel-setup]'));
 const mapStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-status'));
 const mapTilesStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('map-tiles-status'));
+const pinStatus = /** @type {HTMLParagraphElement} */ (document.getElementById('pin-status'));
+const pinDialog = /** @type {HTMLDialogElement} */ (document.getElementById('pin-dialog'));
+const pinForm = /** @type {HTMLFormElement} */ (document.getElementById('pin-form'));
+const pinLabel = /** @type {HTMLInputElement} */ (document.getElementById('pin-label'));
+const pinCoordinates = /** @type {HTMLParagraphElement} */ (document.getElementById('pin-coordinates'));
+
+/** What the line under the map says until a pin is dropped. */
+const PIN_HINT = 'Long-press the map to add a location there.';
+
+/** Where the pin being named was dropped, or `null` if there isn't one. */
+let droppedPin = null;
+
+/** The key of the location the line under the map says was just added, or `null` if it shows the hint. */
+let addedPinKey = null;
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
 let routeMap = null;
 
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
+
+/** The locations not in the route yet when the map was last drawn, from {@link newLocationsText}, or `null` before it's drawn. */
+let drawnNewLocations = null;
 
 /**
  * Whether the walking speed has been changed in the settings panel since it
@@ -180,9 +197,44 @@ function showLines(lines) {
   );
 }
 
-/** Shows the status of each line as typed, using only saved search results so typing never searches. */
+/**
+ * Shows the status of each line as typed, using only saved search results so
+ * typing never searches, and marks locations that aren't in the route yet on
+ * the map.
+ */
 function previewLines() {
-  showLines(parseLocations(state.setup.locationsText, { searchResults: state.searchResults }));
+  const lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults });
+  showLines(lines);
+  // Stop saying a pin was added once its line has been deleted.
+  if (addedPinKey !== null && !lines.some(({ result }) => result.isValid && result.location.key === addedPinKey)) {
+    showPinStatus(PIN_HINT);
+  }
+  // Only redraw the map when the locations not in the route yet change, or
+  // are renamed, so typing doesn't keep rebuilding it or closing an open
+  // popup.
+  if (newLocationsText(newLocationMarkers(lines, currentPlan())) !== drawnNewLocations) {
+    updateMap(lines);
+  }
+}
+
+/**
+ * Lists the locations not in the route yet, with their names, to tell
+ * whether the map needs redrawing.
+ *
+ * @param {import('./map.js').MapMarker[]} markers Their markers, from {@link newLocationMarkers}.
+ * @returns {string} Each location's key and marker title, one per line.
+ */
+function newLocationsText(markers) {
+  return markers.map(({ location, title }) => `${location.key} ${title}`).join('\n');
+}
+
+/**
+ * The current plan, if there is a usable one.
+ *
+ * @returns {import('./setup.js').SavedPlan | null} The plan, or `null` if there isn't one or it was saved by an older version without settings.
+ */
+function currentPlan() {
+  return state.plan?.settings ? state.plan : null;
 }
 
 /**
@@ -495,6 +547,10 @@ async function planRoute(from) {
       shouldFitMap = true;
       showPlan();
       showSettingsSummary();
+      showPinStatus(PIN_HINT);
+    } else {
+      // Show locations that were just looked up, even though planning failed.
+      updateMap(result.lines);
     }
     return result.error;
   } finally {
@@ -605,8 +661,11 @@ function showMap() {
   routeMap = createMap(mapContainer, {
     onTilesFailed: () => mapTilesStatus.classList.remove('hidden'),
     onTilesLoaded: () => mapTilesStatus.classList.add('hidden'),
+    onLongPress: openPinDialog,
   });
   showMapStatus(routeMap ? null : "The map couldn't load, which usually means there's no signal. The List tab still works.");
+  // Without a map, there's nowhere to drop a pin.
+  pinStatus.classList.toggle('hidden', !routeMap);
   updateMap();
   if (routeMap && latestPosition) {
     showPosition(routeMap, latestPosition);
@@ -661,17 +720,94 @@ function watchPosition() {
 
 /**
  * Draws the current plan on the map, if the map has been created and is
- * showing. It zooms to fit the route the first time it's drawn after
- * planning, but not after ticking off a stop, so the team's view stays put.
+ * showing, with any locations that aren't in it yet. It zooms to fit the
+ * route the first time it's drawn after planning, but not after ticking off
+ * a stop, so the team's view stays put.
+ *
+ * @param {import('./locations.js').ParsedLocationLine[]} [lines] The location list, if it's already parsed.
  */
-function updateMap() {
+function updateMap(lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults })) {
   if (!routeMap || mapContainer.closest('[hidden]')) {
     return;
   }
-  const route = state.plan?.settings ? mapRoute(state.plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
+  const plan = currentPlan();
+  const route = plan ? mapRoute(plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
+  const newMarkers = newLocationMarkers(lines, plan);
+  route.markers.push(...newMarkers);
+  drawnNewLocations = newLocationsText(newMarkers);
   showRoute(routeMap, route, shouldFitMap);
   shouldFitMap = false;
 }
+
+/**
+ * Shows a message under the map about dropping pins.
+ *
+ * @param {string} message The message.
+ * @param {string | null} [addedKey] The key of the location the message says was added, if it does.
+ */
+function showPinStatus(message, addedKey = null) {
+  pinStatus.textContent = message;
+  addedPinKey = addedKey;
+}
+
+/**
+ * Asks for a name for a pin dropped on the map.
+ *
+ * @param {import('./planner.js').LatLng} latLng Where the pin was dropped.
+ */
+function openPinDialog(latLng) {
+  // Keep the first pin if a long press is reported twice.
+  if (pinDialog.open) {
+    return;
+  }
+  droppedPin = latLng;
+  pinLabel.value = '';
+  pinLabel.setCustomValidity('');
+  pinCoordinates.textContent = `At ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`;
+  // Escape and the back button close the dialog without changing
+  // returnValue, so clear it to stop an earlier Add applying again.
+  pinDialog.returnValue = '';
+  pinDialog.showModal();
+}
+
+/**
+ * Saves a new location list and shows it in the setup form, the line
+ * preview and on the map.
+ *
+ * @param {string} locationsText The new location list.
+ */
+function saveLocationsText(locationsText) {
+  state.setup.locationsText = locationsText;
+  saveState(state);
+  locationsField.value = locationsText;
+  clearTimeout(previewTimer);
+  previewLines();
+}
+
+document.getElementById('pin-cancel').addEventListener('click', () => pinDialog.close('cancel'));
+
+// The name is required, so the dialog only submits with one. Keep it open
+// if the name would stop the line being read.
+pinForm.addEventListener('submit', (event) => {
+  const result = pinLine(pinLabel.value, droppedPin);
+  if (!result.isValid) {
+    event.preventDefault();
+    pinLabel.setCustomValidity(result.error);
+    pinLabel.reportValidity();
+  }
+});
+pinLabel.addEventListener('input', () => pinLabel.setCustomValidity(''));
+
+pinDialog.addEventListener('close', () => {
+  const result = pinDialog.returnValue === 'add' && droppedPin ? pinLine(pinLabel.value, droppedPin) : null;
+  droppedPin = null;
+  if (!result?.isValid) {
+    return;
+  }
+  saveLocationsText(addLocationLine(state.setup.locationsText, result.line));
+  const action = state.plan?.settings ? 'Re-plan from here' : 'Plan route';
+  showPinStatus(`Added ${result.location.label} to the location list. Press ${action} to include it in the route.`, result.location.key);
+});
 
 for (const tab of tabs) {
   tab.addEventListener('click', () => showView(/** @type {'list' | 'map'} */ (tab.dataset.view)));
@@ -702,6 +838,7 @@ document.getElementById('new-challenge').addEventListener('click', () => {
   showMatches([]);
   showSetupError(null);
   showReplanStatus('Uses your current location and time, and the locations still to visit.', false);
+  showPinStatus(PIN_HINT);
   shouldFitMap = true;
   showPlan();
   showSettingsSummary();
