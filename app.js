@@ -3,7 +3,7 @@ import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
-import { planFromSetup, searchesNeeded, timeToday } from './setup.js';
+import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from './setup.js';
 import { defaultState, loadState, resetChallenge, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
@@ -28,6 +28,7 @@ const settingsButton = /** @type {HTMLButtonElement} */ (document.getElementById
 const settingsDialog = /** @type {HTMLDialogElement} */ (document.getElementById('settings-dialog'));
 const speedPresets = /** @type {HTMLDivElement} */ (document.getElementById('speed-presets'));
 const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('settings-speed'));
+const speedField = /** @type {HTMLInputElement} */ (document.getElementById('speed'));
 const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
 const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
 const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
@@ -47,6 +48,13 @@ let routeMap = null;
 
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
+
+/**
+ * Whether the walking speed has been changed in the settings panel since it
+ * opened. A speed outside the slider's range can't be shown on it, so the
+ * speed is only saved when it's changed there.
+ */
+let isSpeedChanged = false;
 
 /** The team's latest position from watching the location, or `null` if there isn't one yet. */
 let latestPosition = null;
@@ -667,8 +675,8 @@ function showSettingsSpeed(speedKmh) {
   }
 }
 
-// The setup form's speed field uses the slider's range too.
-for (const input of [speedSlider, document.getElementById('speed')]) {
+// The setup form's speed field uses the slider's range too, which planning checks.
+for (const input of [speedSlider, speedField]) {
   input.min = String(SPEED_RANGE.min);
   input.max = String(SPEED_RANGE.max);
 }
@@ -694,13 +702,6 @@ speedSlider.addEventListener('input', () => {
   isSpeedChanged = true;
   showSettingsSpeed(Number(speedSlider.value));
 });
-
-/**
- * Whether the walking speed has been changed in the settings panel since it
- * opened. A speed outside the slider's range can't be shown on it, so the
- * speed is only saved when it's changed here.
- */
-let isSpeedChanged = false;
 
 settingsButton.addEventListener('click', () => {
   isSpeedChanged = false;
@@ -747,13 +748,17 @@ settingsDialog.addEventListener('close', () => {
   fillForm();
   showSettingsSummary();
   showCountdown();
-  // Re-plan with the new settings, keeping ticks, the same way the current
-  // route was planned: from the team's position, or from the Start field.
+  // Re-plan with the new settings, keeping ticks: from the Start field if
+  // the team hasn't set off yet, otherwise from their position and now.
   if (state.plan?.settings) {
-    if (state.plan.isFromPosition) {
+    if (replanStartingPoint(state.plan, Date.now()) === 'position') {
       requestReplan();
     } else {
-      planRoute(null);
+      // Show any problem under Re-plan from here, next to the route, as
+      // requestReplan does, rather than only in the setup form.
+      planRoute(null)
+        .then((error) => showReplanStatus(error ?? 'Re-planned with the new settings.', error !== null))
+        .catch(() => showReplanStatus("Re-planning didn't work. Try again.", true));
     }
   }
 });

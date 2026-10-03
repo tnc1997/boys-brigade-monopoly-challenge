@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { planFromSetup, searchesNeeded, timeToday } from '../setup.js';
+import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from '../setup.js';
 import { defaultState } from '../storage.js';
 
 const now = new Date(2026, 9, 3, 11, 0).getTime();
@@ -95,11 +95,6 @@ describe('planFromSetup', () => {
     assert.equal(plan.startTime, later);
   });
 
-  test('records whether the plan starts from the team\'s position', () => {
-    assert.equal(planFromSetup(setupWith()).plan.isFromPosition, false);
-    assert.equal(planFromSetup({ ...setupWith(), from: { lat: 51.4492, lng: -2.5813 } }).plan.isFromPosition, true);
-  });
-
   test('uses the current form values when re-planning', () => {
     const from = { lat: 51.4492, lng: -2.5813 };
     const { plan } = planFromSetup({ ...setupWith({ finishText: 'Finish 51.4556,-2.5894' }, { speedKmh: 3.5 }), from });
@@ -115,6 +110,8 @@ describe('planFromSetup', () => {
     ['the deadline is invalid', {}, { deadline: '' }, /^Deadline: Enter a time/],
     ['the deadline is before the start time', { startTimeText: '16:30' }, {}, /^Deadline: The deadline must be after/],
     ['the walking speed is not greater than 0', {}, { speedKmh: 0 }, /^Walking speed: /],
+    ['the walking speed is below the slider range', {}, { speedKmh: 1.5 }, /^Walking speed: Enter a speed between 2 and 7 km\/h/],
+    ['the walking speed is above the slider range', {}, { speedKmh: 9 }, /^Walking speed: Enter a speed between 2 and 7 km\/h/],
     ['the selfie time is negative', {}, { dwellSeconds: -60 }, /^Selfie time: /],
   ];
   for (const [name, setup, settings, error] of failures) {
@@ -168,5 +165,23 @@ describe('searchesNeeded', () => {
   test('leaves out the start when re-planning from the team\'s position', () => {
     const setup = { ...defaultState().setup, locationsText: '', startText: 'Temple Meads' };
     assert.deepEqual(searchesNeeded({ setup, isFromPosition: true }), []);
+  });
+});
+
+describe('replanStartingPoint', () => {
+  const { plan } = planFromSetup(setupWith({ startTimeText: '11:00' }));
+
+  test('re-plans from the Start field before the team sets off', () => {
+    assert.equal(replanStartingPoint(plan, plan.startTime - 30 * 60000), 'start');
+  });
+
+  test("re-plans from the team's position once they've set off", () => {
+    assert.equal(replanStartingPoint(plan, plan.startTime), 'position');
+    assert.equal(replanStartingPoint(plan, plan.startTime + 3 * 3600000), 'position');
+  });
+
+  test("re-plans a plan made with Re-plan from here from the team's position", () => {
+    const { plan: replanned } = planFromSetup({ ...setupWith(), from: { lat: 51.4492, lng: -2.5813 }, now: plan.startTime + 3600000 });
+    assert.equal(replanStartingPoint(replanned, replanned.startTime + 60000), 'position');
   });
 });

@@ -1,5 +1,6 @@
 import { parseLocation, parseLocations } from './locations.js';
 import { plan } from './planner.js';
+import { SPEED_RANGE } from './settings.js';
 
 /**
  * A plan together with the locations and times it was made from, so it can
@@ -12,9 +13,7 @@ import { plan } from './planner.js';
  *   startTime: number,
  *   deadline: number,
  *   settings: Pick<import('./storage.js').Settings, 'speedKmh' | 'detourFactor' | 'dwellSeconds' | 'safetyMarginSeconds'>,
- *   isFromPosition: boolean,
  * }} SavedPlan
- * `isFromPosition` is whether the plan starts from the team's position (Re-plan from here) rather than the Start field.
  */
 
 /**
@@ -118,8 +117,8 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   if (deadline <= startTime) {
     return failure('Deadline: The deadline must be after the start time.');
   }
-  if (!(settings.speedKmh > 0)) {
-    return failure('Walking speed: Enter a speed greater than 0 km/h.');
+  if (!(settings.speedKmh >= SPEED_RANGE.min && settings.speedKmh <= SPEED_RANGE.max)) {
+    return failure(`Walking speed: Enter a speed between ${SPEED_RANGE.min} and ${SPEED_RANGE.max} km/h.`);
   }
   if (!(settings.dwellSeconds >= 0)) {
     return failure('Selfie time: Enter a time of 0 minutes or more.');
@@ -156,7 +155,6 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
       startTime,
       deadline,
       settings: planSettings,
-      isFromPosition: from !== null,
     },
     error: null,
     lines,
@@ -183,4 +181,21 @@ export function searchesNeeded({ setup, searchResults = {}, isFromPosition = fal
     ...(setup.finishText.trim() === '' ? [] : [parseLocation(setup.finishText, { searchResults })]),
   ];
   return parsed.filter((result) => !result.isValid && result.query).map((result) => result.query);
+}
+
+/**
+ * Decides where to re-plan from after the settings change. Before the
+ * current plan's start time the team hasn't set off, so the route still
+ * starts at the Start field and start time. After it, the team is on the
+ * move, so the route starts from their position and the current time.
+ *
+ * @param {SavedPlan} plan The current plan.
+ * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @returns {'start' | 'position'} Where to re-plan from.
+ * @example
+ * replanStartingPoint(plan, plan.startTime - 60000); // 'start'
+ * replanStartingPoint(plan, plan.startTime + 60000); // 'position'
+ */
+export function replanStartingPoint(plan, now) {
+  return now < plan.startTime ? 'start' : 'position';
 }
