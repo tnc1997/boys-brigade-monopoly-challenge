@@ -86,6 +86,13 @@ describe('service worker caches', () => {
     for (const args of lookups) {
       assert.match(args, /\{ cacheName(: CACHE_NAME)? \}/, `caches.match(${args}) doesn't name a cache`);
     }
-    assert.match(sw, /name\.startsWith\(CACHE_PREFIX\)\)/);
+    assert.match(sw, /const prefixes = \[CACHE_PREFIX, \.\.\.LEGACY_CACHE_PREFIXES\];/);
+  });
+});
+
+describe('service worker cache names', () => {
+  test('uses the new name, and treats caches with the old name as its own', () => {
+    assert.match(sw, /const CACHE_PREFIX = 'monopoly-challenge-route-planner-';/);
+    assert.match(sw, /const LEGACY_CACHE_PREFIXES = \['monopoly-challenge-planner-'\];/);
   });
 });

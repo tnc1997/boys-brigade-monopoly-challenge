@@ -2,7 +2,7 @@
 
 A phone-friendly route planner for the Boys' Brigade Monopoly Challenge in Bristol. Paste in the list of locations at the start, and it plans a walking route that fits in as many group selfies as possible before the deadline, ending at the finish if there is one. During the day you can tick off selfies, see the route and your position on a map, change the pace and re-plan from wherever you are.
 
-**Open it on your phone:** https://tnc1997.github.io/boys-brigade-monopoly-challenge/
+**Open it on your phone:** https://tnc1997.github.io/boys-brigade-monopoly-challenge-route-planner/
 
 This is an unofficial tool made by a team taking part. It isn't run or endorsed by the Boys' Brigade, and the challenge's own rules and instructions always come first.
 

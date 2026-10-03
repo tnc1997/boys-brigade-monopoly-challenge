@@ -17,9 +17,17 @@ const NETWORK_TIMEOUT_MS = 4000;
 
 /**
  * The start of this app's cache names. Other sites on tnc1997.github.io
- * share the same storage, so only caches with this prefix are ever deleted.
+ * share the same storage, so only caches with this prefix (or a legacy one)
+ * are ever read or deleted.
  */
-const CACHE_PREFIX = 'monopoly-challenge-planner-';
+const CACHE_PREFIX = 'monopoly-challenge-route-planner-';
+
+/**
+ * Cache name prefixes used by earlier versions of this app. Their caches
+ * count as this app's, so Leaflet can be reused from them and they're
+ * deleted when the service worker activates.
+ */
+const LEGACY_CACHE_PREFIXES = ['monopoly-challenge-planner-'];
 
 /** Change this to replace every saved file, for example when the list below changes. */
 const CACHE_NAME = `${CACHE_PREFIX}v1`;
@@ -62,13 +70,15 @@ async function matchSaved(key) {
 }
 
 /**
- * Lists this app's caches. Other sites on tnc1997.github.io share the same
- * storage, so only caches with this app's prefix are ever read or deleted.
+ * Lists this app's caches, including ones named by earlier versions. Other
+ * sites on tnc1997.github.io share the same storage, so only caches with
+ * this app's prefixes are ever read or deleted.
  *
  * @returns {Promise<string[]>} The names of this app's caches.
  */
 async function appCacheNames() {
-  return (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX));
+  const prefixes = [CACHE_PREFIX, ...LEGACY_CACHE_PREFIXES];
+  return (await caches.keys()).filter((name) => prefixes.some((prefix) => name.startsWith(prefix)));
 }
 
 /**

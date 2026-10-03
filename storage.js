@@ -39,7 +39,10 @@
  */
 
 /** The localStorage key the state is saved under. */
-export const STORAGE_KEY = 'monopoly-challenge-planner';
+export const STORAGE_KEY = 'monopoly-challenge-route-planner';
+
+/** Keys the state was saved under by earlier versions, which it's moved from when loading. */
+export const LEGACY_STORAGE_KEYS = ['monopoly-challenge-planner'];
 
 /** The current schema version. Increase it when the shape of {@link AppState} changes. */
 export const SCHEMA_VERSION = 1;
@@ -91,7 +94,8 @@ const isObject = (value) => typeof value === 'object' && value !== null && !Arra
 /**
  * Loads the saved state. Anything missing, unreadable or saved with a
  * different schema version falls back to the defaults, so the app always
- * gets a complete state.
+ * gets a complete state. State saved by an earlier version under one of the
+ * {@link LEGACY_STORAGE_KEYS} is moved to {@link STORAGE_KEY}.
  *
  * @param {StateStorage | null} [storage] Where to load from. Defaults to the browser's localStorage.
  * @returns {AppState} The saved state, or the default state.
@@ -103,7 +107,7 @@ export function loadState(storage = browserStorage()) {
   const defaults = defaultState();
   let saved;
   try {
-    const text = storage?.getItem(STORAGE_KEY);
+    const text = storage?.getItem(STORAGE_KEY) ?? moveLegacyState(storage);
     saved = text ? JSON.parse(text) : null;
   } catch {
     return defaults;
@@ -143,6 +147,25 @@ export function saveState(state, storage = browserStorage()) {
 }
 
 /**
+ * Moves state saved under a legacy key to the current key, so it isn't lost
+ * when the key changes.
+ *
+ * @param {StateStorage | null | undefined} storage Where the state is saved.
+ * @returns {string | null} The legacy state's text, or `null` if there isn't any.
+ */
+function moveLegacyState(storage) {
+  for (const key of LEGACY_STORAGE_KEYS) {
+    const text = storage?.getItem(key);
+    if (text) {
+      storage.setItem(STORAGE_KEY, text);
+      storage.removeItem(key);
+      return text;
+    }
+  }
+  return null;
+}
+
+/**
  * Removes the saved state, for starting a new challenge.
  *
  * @param {StateStorage | null} [storage] Where to remove it from. Defaults to the browser's localStorage.
@@ -153,7 +176,9 @@ export function clearState(storage = browserStorage()) {
     if (!storage) {
       return false;
     }
-    storage.removeItem(STORAGE_KEY);
+    for (const key of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+      storage.removeItem(key);
+    }
     return true;
   } catch {
     return false;
