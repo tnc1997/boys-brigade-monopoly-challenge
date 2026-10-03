@@ -27,40 +27,58 @@
   --color-position: var(--theme-position);
 }
 
+/*
+ * The colours come from the Boys' Brigade branding guidelines' colour palette
+ * (section 3.1, page 13): Dark Blue #2d395a, Blue #224b8e, Light Blue #5d99d2
+ * and Grey #575756. Every theme colour is one of these, or one of them mixed
+ * with white, black or another of them (as color-mix(in srgb) would, written
+ * out so browsers without color-mix() don't fall back to the unmixed colour).
+ * https://boys-brigade.org.uk/downloads/brandingguidelines.pdf
+ *
+ * Each pairing meets WCAG AA contrast in both themes: 4.5:1 for text, and 3:1
+ * for input borders, focus rings, the slider, map markers, the route line and
+ * the position dot.
+ */
 :root {
-  --theme-page: var(--color-slate-50);
+  --theme-page: #f2f7fb; /* Light Blue 8%, white */
   --theme-surface: var(--color-white);
-  --theme-ink: var(--color-slate-900);
-  --theme-muted: var(--color-slate-600);
-  --theme-line: var(--color-slate-200);
-  --theme-field: var(--color-slate-300);
-  --theme-accent: var(--color-emerald-700);
-  --theme-accent-strong: var(--color-emerald-800);
-  --theme-accent-ink: var(--color-emerald-800);
-  --theme-accent-soft: var(--color-emerald-50);
-  --theme-accent-line: var(--color-emerald-200);
+  --theme-ink: #2d395a; /* Dark Blue */
+  --theme-muted: #575756; /* Grey */
+  --theme-line: #dddddd; /* Grey 20%, white */
+  --theme-field: #70706f; /* Grey 85%, white */
+  --theme-accent: #224b8e; /* Blue */
+  --theme-accent-strong: #2d395a; /* Dark Blue */
+  --theme-accent-ink: #224b8e; /* Blue */
+  --theme-accent-soft: #ecf3fa; /* Light Blue 12%, white */
+  --theme-accent-line: #c6dbef; /* Light Blue 35%, white */
+  /* The palette has no red, so warnings and errors keep Tailwind's. */
   --theme-danger: var(--color-red-700);
   --theme-danger-soft: var(--color-red-50);
   --theme-danger-line: var(--color-red-200);
-  --theme-position: var(--color-sky-600);
+  /* Darker than Light Blue to stand out on the map tiles, which are light in both themes. */
+  --theme-position: #5189c4; /* Light Blue 80%, Blue */
 }
 
+/*
+ * The guidelines don't cover dark mode, so it uses Dark Blue mixed with black
+ * for the backgrounds and light tints for the text. The accent sits between
+ * Blue and Light Blue, so white text on it and focus rings around it both pass.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --theme-page: var(--color-slate-950);
-    --theme-surface: var(--color-slate-900);
-    --theme-ink: var(--color-slate-100);
-    --theme-muted: var(--color-slate-400);
-    --theme-line: var(--color-slate-700);
-    --theme-field: var(--color-slate-600);
-    --theme-accent: var(--color-emerald-700);
-    --theme-accent-strong: var(--color-emerald-800);
-    --theme-accent-ink: var(--color-emerald-300);
-    --theme-accent-soft: var(--color-emerald-950);
-    --theme-accent-line: var(--color-emerald-800);
+    --theme-page: #121724; /* Dark Blue 40%, black */
+    --theme-surface: #1b2236; /* Dark Blue 60%, black */
+    --theme-ink: #f2f7fb; /* Light Blue 8%, white */
+    --theme-muted: #cdcdcc; /* Grey 30%, white */
+    --theme-line: #4d5773; /* Dark Blue 85%, white */
+    --theme-field: #ababab; /* Grey 50%, white */
+    --theme-accent: #4072b0; /* Light Blue 50%, Blue */
+    --theme-accent-strong: #224b8e; /* Blue */
+    --theme-accent-ink: #8eb8e0; /* Light Blue 70%, white */
+    --theme-accent-soft: #1d3055; /* Blue 35%, surface */
+    --theme-accent-line: #204178; /* Blue 75%, surface */
     --theme-danger: var(--color-red-400);
     --theme-danger-soft: var(--color-red-950);
     --theme-danger-line: var(--color-red-900);
-    --theme-position: var(--color-sky-400);
   }
 }

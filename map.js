@@ -51,7 +51,7 @@ const MARKER_CLASSES = {
   stop: 'bg-accent text-white',
   done: 'bg-accent-line text-accent-ink',
   finish: 'bg-ink text-surface',
-  skipped: 'bg-field text-ink opacity-80',
+  skipped: 'bg-field text-surface',
   new: 'border-2 border-dashed border-accent bg-surface text-accent-ink',
 };
 
