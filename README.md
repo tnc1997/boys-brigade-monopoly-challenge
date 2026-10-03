@@ -29,6 +29,8 @@ Each line needs one of these:
 | Coordinates | Latitude and longitude, with any label | `Temple Meads 51.4492,-2.5813` |
 | A full Google Maps link | The link, with any label | `Cabot Tower https://www.google.com/maps?q=51.4517,-2.6034` |
 
+**Or drop a pin on the map.** On the **Map** tab, long-press the spot (or right-click it on a computer) and give it a name. It's added to the end of **Locations** as a line with its coordinates. Until you press **Plan route** or **Re-plan from here**, it shows on the map as a dashed **+**. To remove it, delete its line from **Locations**, and plan again if it's already in the route.
+
 After planning, each address line shows what it matched, like `Line 2: Old Kent Road → Queen Square, City Centre, Bristol`, and the **Looked up** list does the same for the Start and Finish. Check they're the right places.
 
 **what3words addresses can't be used directly.** Converting them to coordinates needs a paid what3words plan, so the planner rejects a line with a what3words address and tells you what to do. For each one, either:
@@ -42,7 +44,7 @@ After planning, each address line shows what it matched, like `Line 2: Old Kent 
 
 ### 3. Follow the route
 
-- The **List** tab shows each stop in order with its ETA, the walk to it, and a **Directions** button that opens walking directions in Google Maps. Locations that don't fit are listed under **Skipped**.
+- The **List** tab shows each stop in order with its ETA, the walk to it, and a **Google Maps** button that opens walking directions. On an iPhone, iPad or Mac there's also an **Apple Maps** button. Locations that don't fit are listed under **Skipped**.
 - The **Map** tab shows the numbered stops, the route line, the finish, skipped locations in grey, and your position as a blue dot.
 - After each selfie, tap **Mark selfie done**. The counter shows how many are done.
 - The header shows a countdown to the deadline. A red banner warns you when time is nearly up ("Head to the finish now", or "Last few selfies" without a finish), or when you're running behind the plan.

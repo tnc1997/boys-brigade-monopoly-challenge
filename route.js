@@ -8,7 +8,8 @@ import { walkSeconds } from './planner.js';
  * @property {import('./locations.js').Location} location The location.
  * @property {number} arrivalTime When the team arrives, in milliseconds since the Unix epoch.
  * @property {number} walkSeconds How long the walk from the previous stop (or the start) takes, in seconds.
- * @property {string} directionsUrl A Google Maps link with walking directions to the location.
+ * @property {string} googleMapsDirectionsUrl A Google Maps URL with walking directions to the location.
+ * @property {string} appleMapsDirectionsUrl An Apple Maps URL with walking directions to the location.
  */
 
 /**
@@ -22,18 +23,63 @@ import { walkSeconds } from './planner.js';
  */
 
 /**
- * Creates a Google Maps link with walking directions from the current
+ * Writes coordinates for a maps URL, to 6 decimal places (about 10 cm), so
+ * a value very close to zero isn't written in exponent notation like
+ * `-5e-7`, which maps apps can't read.
+ *
+ * @param {import('./planner.js').LatLng} location The location.
+ * @returns {string} The coordinates as `lat,lng`, like `51.454500,-2.587900`.
+ */
+function coordinatesText({ lat, lng }) {
+  // Rounding first also turns -0.000000 into 0.000000.
+  const format = (value) => Number(value.toFixed(6)).toFixed(6);
+  return `${format(lat)},${format(lng)}`;
+}
+
+/**
+ * Creates a Google Maps URL with walking directions from the current
  * position to a location.
  *
  * @param {import('./planner.js').LatLng} location Where to go.
- * @returns {string} The link.
+ * @returns {string} The URL.
  * @example
- * directionsUrl({ lat: 51.4545, lng: -2.5879 });
- * // 'https://www.google.com/maps/dir/?api=1&destination=51.4545%2C-2.5879&travelmode=walking'
+ * googleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 });
+ * // 'https://www.google.com/maps/dir/?api=1&destination=51.454500%2C-2.587900&travelmode=walking'
  */
-export function directionsUrl({ lat, lng }) {
-  const params = new URLSearchParams({ api: '1', destination: `${lat},${lng}`, travelmode: 'walking' });
+export function googleMapsDirectionsUrl({ lat, lng }) {
+  const params = new URLSearchParams({ api: '1', destination: coordinatesText({ lat, lng }), travelmode: 'walking' });
   return `https://www.google.com/maps/dir/?${params}`;
+}
+
+/**
+ * Creates an Apple Maps URL with walking directions from the current
+ * position to a location. It opens the Apple Maps app on an iPhone, and
+ * Apple Maps on the web elsewhere.
+ *
+ * @param {import('./planner.js').LatLng} location Where to go.
+ * @returns {string} The URL.
+ * @example
+ * appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 });
+ * // 'https://maps.apple.com/?daddr=51.454500,-2.587900&dirflg=w'
+ */
+export function appleMapsDirectionsUrl({ lat, lng }) {
+  return `https://maps.apple.com/?daddr=${coordinatesText({ lat, lng })}&dirflg=w`;
+}
+
+/**
+ * Works out whether the app is running on an Apple device (iPhone, iPad or
+ * Mac), where Apple Maps is available. Apple Maps on the web may not support
+ * other devices' browsers, such as Chrome on Android, so its directions link
+ * is only offered on Apple devices. iPads report themselves as Macs.
+ *
+ * @param {string} userAgent The browser's user agent, from `navigator.userAgent`.
+ * @returns {boolean} Whether it's an Apple device.
+ * @example
+ * isAppleDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) …'); // true
+ * isAppleDevice('Mozilla/5.0 (Linux; Android 15; Pixel 9) …'); // false
+ */
+export function isAppleDevice(userAgent) {
+  return /\b(?:iPhone|iPad|iPod|Macintosh)\b/.test(userAgent);
 }
 
 /**
@@ -59,7 +105,7 @@ export function formatDuration(seconds) {
 }
 
 /**
- * Describes a saved plan as stops to show, with walk times and links.
+ * Describes a saved plan as stops to show, with walk times and directions URLs.
  *
  * @param {import('./setup.js').SavedPlan} plan The plan.
  * @returns {RouteView} The stops, the walk to the finish, the end ETA and the skipped locations.
@@ -71,7 +117,8 @@ export function describeRoute(plan) {
     location,
     arrivalTime,
     walkSeconds: walkSeconds(previous, location, walkOptions),
-    directionsUrl: directionsUrl(location),
+    googleMapsDirectionsUrl: googleMapsDirectionsUrl(location),
+    appleMapsDirectionsUrl: appleMapsDirectionsUrl(location),
   });
 
   const stops = plan.order.map((index, position) =>
@@ -161,6 +208,33 @@ export function mapRoute(plan, doneKeys, formatTime) {
 
   const path = [plan.start, ...route.stops.map(({ location }) => location), ...(route.finish ? [route.finish.location] : [])];
   return { path, markers };
+}
+
+/**
+ * Makes markers for the locations in the location list that aren't in the
+ * plan yet, such as a pin just dropped on the map, so the team can see them
+ * before planning again. Each location is marked once, however many lines
+ * it's on. To remove one, delete its line from the location list.
+ *
+ * @param {import('./locations.js').ParsedLocationLine[]} lines The lines of the location list.
+ * @param {import('./setup.js').SavedPlan | null} plan The plan, or `null` if there isn't one.
+ * @returns {import('./map.js').MapMarker[]} A marker for each location that isn't in the plan.
+ * @example
+ * newLocationMarkers(parseLocations('Cabot Tower 51.451740,-2.603400'), null);
+ * // [{ kind: 'new', location: { lat: 51.45174, … }, label: '+', title: 'Cabot Tower, not in the route yet' }]
+ */
+export function newLocationMarkers(lines, plan) {
+  const keys = new Set(plan?.points.map(({ key }) => key));
+  /** @type {import('./map.js').MapMarker[]} */
+  const markers = [];
+  for (const { result } of lines) {
+    if (result.isValid && !keys.has(result.location.key)) {
+      const { location } = result;
+      keys.add(location.key);
+      markers.push({ kind: 'new', location, label: '+', title: `${location.label}, not in the route yet` });
+    }
+  }
+  return markers;
 }
 
 /**

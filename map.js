@@ -32,11 +32,18 @@ export const BRISTOL_BOUNDS = [
  * A place to mark on the map.
  *
  * @typedef {object} MapMarker
- * @property {'start' | 'stop' | 'done' | 'finish' | 'skipped'} kind What the place is, which sets how it looks.
+ * @property {'start' | 'stop' | 'done' | 'finish' | 'skipped' | 'new'} kind What the place is, which sets how it looks. `new` is a location that isn't in the route yet.
  * @property {import('./planner.js').LatLng} location Where it is.
  * @property {string} label What the marker shows: the stop's number, or a short symbol.
  * @property {string} title A description for its tooltip and screen readers, like "1. Old Kent Road, ETA 11:02".
  */
+
+/**
+ * How long after the map is pressed a context menu still counts as a long
+ * press or right-click, in milliseconds. Long presses fire it after about
+ * half a second.
+ */
+const PRESS_MAX_AGE_MS = 2000;
 
 /** How each kind of marker looks, as Tailwind classes. */
 const MARKER_CLASSES = {
@@ -45,6 +52,7 @@ const MARKER_CLASSES = {
   done: 'bg-accent-line text-accent-ink',
   finish: 'bg-ink text-surface',
   skipped: 'bg-field text-surface',
+  new: 'border-2 border-dashed border-accent bg-surface text-accent-ink',
 };
 
 /**
@@ -55,9 +63,10 @@ const MARKER_CLASSES = {
  * @param {object} [options] Callbacks.
  * @param {() => void} [options.onTilesFailed] Called when map tiles fail to load, for example without signal.
  * @param {() => void} [options.onTilesLoaded] Called when map tiles load again.
+ * @param {(latLng: import('./planner.js').LatLng) => void} [options.onLongPress] Called with the place the map was long-pressed or right-clicked, to drop a pin there.
  * @returns {RouteMap | null} The map, or `null` if Leaflet couldn't be loaded (for example, without signal).
  */
-export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded = () => {} } = {}) {
+export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded = () => {}, onLongPress = () => {} } = {}) {
   const { L } = globalThis;
   if (!L) {
     return null;
@@ -68,6 +77,24 @@ export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded =
     .on('tileload', onTilesLoaded)
     .addTo(map);
   map.fitBounds(BRISTOL_BOUNDS);
+  // Leaflet fires contextmenu for a right-click, a long press on Android and,
+  // with its tapHold option (on by default in mobile Safari), a long press on
+  // iOS. It isn't fired for presses on markers, popups or the zoom buttons.
+  // The keyboard's context menu key (or Shift+F10) also fires contextmenu,
+  // at a point the team didn't choose. Not every browser says where it came
+  // from, so only count it if the map was pressed just before, as it is for
+  // a right-click or a long press.
+  let lastPressTime = -Infinity;
+  container.addEventListener('pointerdown', () => {
+    lastPressTime = Date.now();
+  }, { capture: true });
+  map.on('contextmenu', ({ latlng }) => {
+    if (Date.now() - lastPressTime > PRESS_MAX_AGE_MS) {
+      return;
+    }
+    const { lat, lng } = latlng.wrap();
+    onLongPress({ lat, lng });
+  });
   const routeLayer = L.layerGroup().addTo(map);
   // The team's position goes in its own pane above the markers (600), so a
   // stop's marker never hides it.
@@ -114,17 +141,22 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
       title,
       alt: title,
       keyboard: true,
-      zIndexOffset: kind === 'skipped' ? -1000 : 0,
+      // New locations go on top, so a pin just dropped near a stop can
+      // still be seen and tapped.
+      zIndexOffset: { skipped: -1000, new: 1000 }[kind] ?? 0,
     });
     const popup = document.createElement('p');
-    popup.className = 'm-0 text-sm';
+    popup.className = '!m-0 text-sm';
     popup.textContent = title;
     marker.bindPopup(popup).addTo(routeLayer);
   }
-  // Fit the route itself, so far-off skipped locations don't zoom the map
-  // out so far that the stops overlap.
-  const onRoute = markers.filter(({ kind }) => kind !== 'skipped');
-  const fitted = onRoute.length > 1 ? onRoute : markers;
+  // Fit the route itself, so far-off skipped locations (or new ones) don't
+  // zoom the map out so far that the stops overlap. With too little route
+  // to fit, use the plan's other places, and only fit new locations when
+  // there's nothing else, such as before the first plan.
+  const onRoute = markers.filter(({ kind }) => kind !== 'skipped' && kind !== 'new');
+  const planned = markers.filter(({ kind }) => kind !== 'new');
+  const fitted = onRoute.length > 1 ? onRoute : planned.length > 0 ? planned : markers;
   if (shouldFit && fitted.length > 0) {
     map.fitBounds(
       fitted.map(({ location }) => [location.lat, location.lng]),
