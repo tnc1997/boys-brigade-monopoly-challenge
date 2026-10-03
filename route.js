@@ -53,6 +53,22 @@ export function appleMapsDirectionsUrl({ lat, lng }) {
 }
 
 /**
+ * Works out whether the app is running on an Apple device (iPhone, iPad or
+ * Mac), where Apple Maps is available. Apple Maps on the web may not support
+ * other devices' browsers, such as Chrome on Android, so its directions link
+ * is only offered on Apple devices. iPads report themselves as Macs.
+ *
+ * @param {string} userAgent The browser's user agent, from `navigator.userAgent`.
+ * @returns {boolean} Whether it's an Apple device.
+ * @example
+ * isAppleDevice('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) …'); // true
+ * isAppleDevice('Mozilla/5.0 (Linux; Android 15; Pixel 9) …'); // false
+ */
+export function isAppleDevice(userAgent) {
+  return /\b(?:iPhone|iPad|iPod|Macintosh)\b/.test(userAgent);
+}
+
+/**
  * Formats a duration as minutes, or hours and minutes, rounding to the
  * nearest minute.
  *
