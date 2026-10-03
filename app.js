@@ -73,6 +73,9 @@ let routeMap = null;
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
 
+/** The locations not in the route yet when the map was last drawn, from {@link newLocationKeys}, or `null` before it's drawn. */
+let drawnNewLocationKeys = null;
+
 /**
  * Whether the walking speed has been changed in the settings panel since it
  * opened. A speed outside the slider's range can't be shown on it, so the
@@ -197,8 +200,26 @@ function showLines(lines) {
  * the map.
  */
 function previewLines() {
-  showLines(parseLocations(state.setup.locationsText, { searchResults: state.searchResults }));
-  updateMap();
+  const lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults });
+  showLines(lines);
+  // Only redraw the map when the locations not in the route yet change, so
+  // typing doesn't keep rebuilding it or closing an open popup.
+  if (newLocationKeys(lines) !== drawnNewLocationKeys) {
+    updateMap(lines);
+  }
+}
+
+/**
+ * Lists the keys of the locations not in the route yet, to tell whether the
+ * map needs redrawing.
+ *
+ * @param {import('./locations.js').ParsedLocationLine[]} lines The lines of the location list.
+ * @returns {string} The keys, joined into one string.
+ */
+function newLocationKeys(lines) {
+  return newLocationMarkers(lines, state.plan?.settings ? state.plan : null)
+    .map(({ location }) => location.key)
+    .join(' ');
 }
 
 /**
@@ -682,15 +703,17 @@ function watchPosition() {
  * showing, with any locations that aren't in it yet. It zooms to fit the
  * route the first time it's drawn after planning, but not after ticking off
  * a stop, so the team's view stays put.
+ *
+ * @param {import('./locations.js').ParsedLocationLine[]} [lines] The location list, if it's already parsed.
  */
-function updateMap() {
+function updateMap(lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults })) {
   if (!routeMap || mapContainer.closest('[hidden]')) {
     return;
   }
   const plan = state.plan?.settings ? state.plan : null;
   const route = plan ? mapRoute(plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
-  const lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults });
   route.markers.push(...newLocationMarkers(lines, plan));
+  drawnNewLocationKeys = newLocationKeys(lines);
   showRoute(routeMap, route, shouldFitMap);
   shouldFitMap = false;
 }
