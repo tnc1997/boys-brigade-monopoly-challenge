@@ -15,8 +15,14 @@
 /** How long to wait for the network before using the saved copy of the app's files, in milliseconds. */
 const NETWORK_TIMEOUT_MS = 4000;
 
+/**
+ * The start of this app's cache names. Other sites on tnc1997.github.io
+ * share the same storage, so only caches with this prefix are ever deleted.
+ */
+const CACHE_PREFIX = 'monopoly-challenge-planner-';
+
 /** Change this to replace every saved file, for example when the list below changes. */
-const CACHE_NAME = 'monopoly-challenge-planner-v1';
+const CACHE_NAME = `${CACHE_PREFIX}v1`;
 
 /** The app's own files, relative to this script. Every top-level module must be listed. */
 const APP_FILES = [
@@ -98,7 +104,7 @@ self.addEventListener('activate', (event) => {
       // old caches (which may still have a copy) are deleted.
       await Promise.all(LIBRARY_FILES.map(saveLibraryFile));
       const names = await caches.keys();
-      await Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)));
+      await Promise.all(names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME).map((name) => caches.delete(name)));
       await self.clients.claim();
     })(),
   );
@@ -148,8 +154,11 @@ self.addEventListener('fetch', (event) => {
   // With a weak signal the network can hang, so use the saved copy after a
   // few seconds. The network request carries on and still refreshes it.
   const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS)).then(saved);
+  // An error from the server (such as a 404 or 500 during a GitHub Pages
+  // problem) is treated like no signal, using the saved copy if there is one.
+  const usable = network.then(async (loaded) => (loaded.ok ? loaded : ((await saved()) ?? loaded)));
   event.respondWith(
-    Promise.race([network, timeout.then((match) => match ?? network)])
+    Promise.race([usable, timeout.then((match) => match ?? usable)])
       .catch(saved)
       .then((response) => response ?? Response.error()),
   );
