@@ -43,6 +43,7 @@
               To label an address, put the label first with a colon, like <code>Old Kent Road: Queen Square, Bristol</code>.
               For a what3words address, tap Navigate in the what3words app and paste the address it gives instead.
               To get coordinates on a phone, long-press the spot in Google Maps to drop a pin, then copy them from the search box.
+              Or long-press a spot on the map in the Map tab to add it here.
               Addresses are looked up with <a href="https://nominatim.openstreetmap.org/" target="_blank" rel="noopener" class="underline">OpenStreetMap Nominatim</a>, © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" class="underline">OpenStreetMap contributors</a>.
             </p>
             <textarea id="locations" data-setup="locationsText" rows="8" aria-describedby="locations-hint" spellcheck="false" autocapitalize="off"
@@ -131,7 +132,8 @@
           <p class="text-sm text-muted">Add your locations above and press Plan route.</p>
         </div>
         <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" class="mt-3" hidden>
-          <div id="map" role="region" aria-label="Map of the route" class="h-[60dvh] min-h-80 overflow-hidden rounded-md ring-1 ring-line [&_.leaflet-control-zoom_a]:!size-11 [&_.leaflet-control-zoom_a]:!leading-[44px] [&_.leaflet-control-zoom_a]:!text-2xl"></div>
+          <div id="map" role="region" aria-label="Map of the route" class="h-[60dvh] min-h-80 overflow-hidden rounded-md ring-1 ring-line [-webkit-touch-callout:none] [&_.leaflet-control-zoom_a]:!size-11 [&_.leaflet-control-zoom_a]:!leading-[44px] [&_.leaflet-control-zoom_a]:!text-2xl [&_.leaflet-popup-content-wrapper]:!bg-surface [&_.leaflet-popup-content-wrapper]:!text-ink [&_.leaflet-popup-tip]:!bg-surface"></div>
+          <p id="pin-status" class="mt-2 text-sm text-muted" role="status">Long-press the map to add a location there.</p>
           <p id="map-status" class="mt-2 hidden text-sm text-muted" role="status"></p>
           <p id="map-tiles-status" class="mt-2 hidden text-sm text-muted" role="status">Some map tiles couldn't load without signal. Your route is still shown, and the List tab works offline.</p>
         </div>
@@ -184,6 +186,25 @@
         <div class="flex justify-end gap-2">
           <button id="settings-cancel" type="button" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft">Cancel</button>
           <button id="settings-save" value="save" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface bg-accent text-white hover:bg-accent-strong">Save and re-plan</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="pin-dialog" aria-labelledby="pin-heading"
+      class="m-auto max-h-[calc(100dvh-2rem)] w-[min(calc(100%-2rem),28rem)] overflow-y-auto overscroll-contain rounded-lg bg-surface p-0 text-ink shadow-xl ring-1 ring-line backdrop:bg-black/50">
+      <form id="pin-form" method="dialog" class="flex flex-col gap-4 p-4">
+        <h2 id="pin-heading" class="text-base font-semibold">Add a location</h2>
+
+        <div class="flex flex-col gap-1">
+          <label for="pin-label" class="text-sm font-medium">Name</label>
+          <input id="pin-label" type="text" required autocomplete="off" enterkeyhint="done" aria-describedby="pin-coordinates" placeholder="Old Kent Road"
+            class="min-h-11 w-full rounded-md border border-field bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30">
+          <p id="pin-coordinates" class="text-xs text-muted"></p>
+        </div>
+
+        <div class="flex justify-end gap-2">
+          <button id="pin-cancel" type="button" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface text-accent-ink ring-1 ring-accent/30 hover:bg-accent-soft">Cancel</button>
+          <button id="pin-add" value="add" class="min-h-11 rounded-md px-4 py-2 font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface bg-accent text-white hover:bg-accent-strong">Add</button>
         </div>
       </form>
     </dialog>

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from '../route.js';
+import { parseLocations } from '../locations.js';
+import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -169,6 +170,26 @@ describe('mapRoute', () => {
     const { markers, path } = mapRoute(plan, [], formatTime);
     assert.deepEqual(markers.filter(({ kind }) => kind === 'skipped').map(({ location }) => location.label), ['Old Kent Road', 'Temple Meads']);
     assert.deepEqual(path, [plan.start]);
+  });
+});
+
+describe('newLocationMarkers', () => {
+  test('marks every location when there is no plan', () => {
+    const markers = newLocationMarkers(parseLocations('Cabot Tower 51.451740,-2.603400'), null);
+    assert.deepEqual(markers, [
+      {
+        kind: 'new',
+        location: { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' },
+        label: '+',
+        title: 'Cabot Tower, not in the route yet',
+        removeKey: '51.451740,-2.603400',
+      },
+    ]);
+  });
+
+  test('marks only the locations that are not in the plan, once each', () => {
+    const lines = parseLocations('Old Kent Road 51.4545,-2.5879\nTemple Meads 51.4492,-2.5813\nPin 51.45,-2.59\nPin again 51.450000,-2.590000\nnot a location');
+    assert.deepEqual(newLocationMarkers(lines, savedPlan()).map(({ title }) => title), ['Pin, not in the route yet']);
   });
 });
 

@@ -255,3 +255,67 @@ export function parseLocations(text, { searchResults = {} } = {}) {
     .filter(({ text: line }) => line.trim() !== '')
     .map((line) => ({ ...line, result: parseLocation(line.text, { searchResults }) }));
 }
+
+/**
+ * Makes a line of the location list for a pin dropped on the map, with its
+ * coordinates to 6 decimal places (about 10 cm). The label is checked, so a
+ * label that looks like coordinates, a Google Maps link or a what3words
+ * address can't stop the line being read.
+ *
+ * @param {string} label What to call the location, as typed.
+ * @param {import('./planner.js').LatLng} latLng Where the pin was dropped.
+ * @returns {{ isValid: true, line: string, location: Location } | { isValid: false, error: string }} The line and the location it gives, or a message saying what's wrong with the label.
+ * @example
+ * pinLine('Cabot Tower', { lat: 51.45174, lng: -2.6034 });
+ * // { isValid: true, line: 'Cabot Tower 51.451740,-2.603400', location: { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' } }
+ */
+export function pinLine(label, { lat, lng }) {
+  const name = label.replace(/\s+/g, ' ').trim();
+  if (!name) {
+    return { isValid: false, error: 'Enter a name for the location.' };
+  }
+  const line = `${name} ${lat.toFixed(6)},${lng.toFixed(6)}`;
+  const result = parseLocation(line);
+  // The line must read back as the pin, not as other coordinates in the label.
+  if (!result.isValid || result.location.lat !== Number(lat.toFixed(6)) || result.location.lng !== Number(lng.toFixed(6))) {
+    return { isValid: false, error: 'Use a name without coordinates, links or what3words addresses.' };
+  }
+  return { isValid: true, line, location: result.location };
+}
+
+/**
+ * Adds a line to the end of the location list.
+ *
+ * @param {string} text The location list as typed.
+ * @param {string} line The line to add.
+ * @returns {string} The location list with the line on the end.
+ * @example
+ * addLocationLine('Old Kent Road 51.4545,-2.5879', 'Cabot Tower 51.451740,-2.603400');
+ * // 'Old Kent Road 51.4545,-2.5879\nCabot Tower 51.451740,-2.603400'
+ */
+export function addLocationLine(text, line) {
+  return text === '' || text.endsWith('\n') ? `${text}${line}` : `${text}\n${line}`;
+}
+
+/**
+ * Removes every line of the location list for a location, such as a pin
+ * dropped by mistake. Other lines, including blank ones, are kept as typed.
+ *
+ * @param {string} text The location list as typed.
+ * @param {string} key The location's key (see {@link Location}).
+ * @param {object} [options] Search results for lines without coordinates.
+ * @param {import('./search.js').SearchResults} [options.searchResults] Search results by {@link searchKey}.
+ * @returns {string} The location list without the location's lines.
+ * @example
+ * removeLocationLines('Old Kent Road 51.4545,-2.5879\nCabot Tower 51.451740,-2.603400', '51.451740,-2.603400');
+ * // 'Old Kent Road 51.4545,-2.5879'
+ */
+export function removeLocationLines(text, key, { searchResults = {} } = {}) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => {
+      const result = line.trim() === '' ? null : parseLocation(line, { searchResults });
+      return !(result?.isValid && result.location.key === key);
+    })
+    .join('\n');
+}

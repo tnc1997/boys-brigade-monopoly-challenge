@@ -32,10 +32,11 @@ export const BRISTOL_BOUNDS = [
  * A place to mark on the map.
  *
  * @typedef {object} MapMarker
- * @property {'start' | 'stop' | 'done' | 'finish' | 'skipped'} kind What the place is, which sets how it looks.
+ * @property {'start' | 'stop' | 'done' | 'finish' | 'skipped' | 'new'} kind What the place is, which sets how it looks. `new` is a location that isn't in the route yet.
  * @property {import('./planner.js').LatLng} location Where it is.
  * @property {string} label What the marker shows: the stop's number, or a short symbol.
  * @property {string} title A description for its tooltip and screen readers, like "1. Old Kent Road, ETA 11:02".
+ * @property {string} [removeKey] The location's key, for a marker whose popup has a Remove button to take it out of the location list.
  */
 
 /** How each kind of marker looks, as Tailwind classes. */
@@ -45,6 +46,7 @@ const MARKER_CLASSES = {
   done: 'bg-accent-line text-accent-ink',
   finish: 'bg-ink text-surface',
   skipped: 'bg-field text-ink opacity-80',
+  new: 'border-2 border-dashed border-accent bg-surface text-accent-ink',
 };
 
 /**
@@ -55,9 +57,10 @@ const MARKER_CLASSES = {
  * @param {object} [options] Callbacks.
  * @param {() => void} [options.onTilesFailed] Called when map tiles fail to load, for example without signal.
  * @param {() => void} [options.onTilesLoaded] Called when map tiles load again.
+ * @param {(latLng: import('./planner.js').LatLng) => void} [options.onLongPress] Called with the place the map was long-pressed or right-clicked, to drop a pin there.
  * @returns {RouteMap | null} The map, or `null` if Leaflet couldn't be loaded (for example, without signal).
  */
-export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded = () => {} } = {}) {
+export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded = () => {}, onLongPress = () => {} } = {}) {
   const { L } = globalThis;
   if (!L) {
     return null;
@@ -68,6 +71,13 @@ export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded =
     .on('tileload', onTilesLoaded)
     .addTo(map);
   map.fitBounds(BRISTOL_BOUNDS);
+  // Leaflet fires contextmenu for a right-click, a long press on Android and,
+  // with its tapHold option (on by default in mobile Safari), a long press on
+  // iOS. It isn't fired for presses on markers, popups or the zoom buttons.
+  map.on('contextmenu', ({ latlng }) => {
+    const { lat, lng } = latlng.wrap();
+    onLongPress({ lat, lng });
+  });
   const routeLayer = L.layerGroup().addTo(map);
   // The team's position goes in its own pane above the markers (600), so a
   // stop's marker never hides it.
@@ -100,7 +110,7 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
   }
   // Skipped locations go underneath, so they don't hide the route.
   const ordered = [...markers.filter(({ kind }) => kind === 'skipped'), ...markers.filter(({ kind }) => kind !== 'skipped')];
-  for (const { kind, location, label, title } of ordered) {
+  for (const { kind, location, label, title, removeKey } of ordered) {
     // Each marker can be tapped anywhere in a 44 px square, larger than the
     // circle that's drawn, so it's easy to hit without crowding the map.
     const target = document.createElement('span');
@@ -114,16 +124,30 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
       title,
       alt: title,
       keyboard: true,
-      zIndexOffset: kind === 'skipped' ? -1000 : 0,
+      // New locations go on top, so a pin just dropped near a stop can
+      // still be tapped to remove it.
+      zIndexOffset: { skipped: -1000, new: 1000 }[kind] ?? 0,
     });
-    const popup = document.createElement('p');
-    popup.className = 'm-0 text-sm';
-    popup.textContent = title;
+    const popup = document.createElement('div');
+    popup.className = 'flex flex-col items-start gap-2';
+    const description = document.createElement('p');
+    description.className = '!m-0 text-sm';
+    description.textContent = title;
+    popup.append(description);
+    if (removeKey) {
+      // The app handles the click, as the button's popup is inside the map.
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'min-h-11 rounded-md px-3 text-sm font-semibold text-danger ring-1 ring-danger-line hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger';
+      remove.textContent = 'Remove';
+      remove.dataset.removeKey = removeKey;
+      popup.append(remove);
+    }
     marker.bindPopup(popup).addTo(routeLayer);
   }
-  // Fit the route itself, so far-off skipped locations don't zoom the map
-  // out so far that the stops overlap.
-  const onRoute = markers.filter(({ kind }) => kind !== 'skipped');
+  // Fit the route itself, so far-off skipped locations (or new ones) don't
+  // zoom the map out so far that the stops overlap.
+  const onRoute = markers.filter(({ kind }) => kind !== 'skipped' && kind !== 'new');
   const fitted = onRoute.length > 1 ? onRoute : markers;
   if (shouldFit && fitted.length > 0) {
     map.fitBounds(

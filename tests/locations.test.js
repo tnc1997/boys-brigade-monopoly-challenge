@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { parseGoogleMapsUrl, parseLocation, parseLocations } from '../locations.js';
+import { addLocationLine, parseGoogleMapsUrl, parseLocation, parseLocations, pinLine, removeLocationLines } from '../locations.js';
 
 describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
@@ -246,5 +246,69 @@ describe('parseLocations with search results', () => {
     const searchResults = { 'temple meads': { isFound: true, lat: 51.4492, lng: -2.5813, name: 'Temple Meads' } };
     const [line] = parseLocations('Temple Meads', { searchResults });
     assert.equal(line.result.location.lat, 51.4492);
+  });
+});
+
+describe('pinLine', () => {
+  test('puts the label before the coordinates, to 6 decimal places', () => {
+    const result = pinLine('Cabot Tower', { lat: 51.45174, lng: -2.6034 });
+    assert.equal(result.isValid, true);
+    assert.equal(result.line, 'Cabot Tower 51.451740,-2.603400');
+    assert.deepEqual(result.location, { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' });
+  });
+
+  test('makes a line that reads back as the same location', () => {
+    const { line } = pinLine('  Old   Kent Road ', { lat: 51.4545123456, lng: -2.5879 });
+    assert.equal(line, 'Old Kent Road 51.454512,-2.587900');
+    assert.deepEqual(parseLocation(line).location, { lat: 51.454512, lng: -2.5879, label: 'Old Kent Road', key: '51.454512,-2.587900' });
+  });
+
+  test('works on the prime meridian, where a longitude can round to -0', () => {
+    assert.equal(pinLine('Greenwich', { lat: 51.4779, lng: -0.0000001 }).line, 'Greenwich 51.477900,-0.000000');
+  });
+
+  test('keeps a label with a colon or numbers', () => {
+    assert.equal(pinLine('Stop 3: the bandstand', { lat: 51.45, lng: -2.59 }).line, 'Stop 3: the bandstand 51.450000,-2.590000');
+  });
+
+  test('needs a label', () => {
+    for (const label of ['', '   ', '\n']) {
+      assert.deepEqual(pinLine(label, { lat: 51.45, lng: -2.59 }), { isValid: false, error: 'Enter a name for the location.' });
+    }
+  });
+
+  test('rejects a label that would stop the line being read', () => {
+    for (const label of ['Near 51.4545,-2.5879', 'filled.count.soap', 'https://www.google.com/maps?q=51.4517,-2.6034']) {
+      const result = pinLine(label, { lat: 51.45, lng: -2.59 });
+      assert.equal(result.isValid, false, label);
+      assert.match(result.error, /without coordinates, links or what3words addresses/);
+    }
+  });
+});
+
+describe('addLocationLine', () => {
+  test('adds the line on its own line', () => {
+    assert.equal(addLocationLine('Old Kent Road 51.4545,-2.5879', 'Pin 51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\nPin 51.450000,-2.590000');
+  });
+
+  test("doesn't add a blank line to an empty list or one that ends with a new line", () => {
+    assert.equal(addLocationLine('', 'Pin 51.450000,-2.590000'), 'Pin 51.450000,-2.590000');
+    assert.equal(addLocationLine('Old Kent Road 51.4545,-2.5879\n', 'Pin 51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\nPin 51.450000,-2.590000');
+  });
+});
+
+describe('removeLocationLines', () => {
+  test('removes the lines for the location and keeps the rest as typed', () => {
+    const text = 'Old Kent Road 51.4545,-2.5879\n\nPin 51.450000,-2.590000\nTemple Meads 51.4492,-2.5813\nAgain 51.45,-2.59\nnot a location';
+    assert.equal(removeLocationLines(text, '51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\n\nTemple Meads 51.4492,-2.5813\nnot a location');
+  });
+
+  test('removes a looked-up address by the key of its search result', () => {
+    const searchResults = { 'queen square, bristol': { isFound: true, lat: 51.45, lng: -2.5938, name: 'Queen Square, Bristol' } };
+    assert.equal(removeLocationLines('Queen Square, Bristol\nPin 51.450000,-2.590000', '51.450000,-2.593800', { searchResults }), 'Pin 51.450000,-2.590000');
+  });
+
+  test('leaves the list alone when the location is not in it', () => {
+    assert.equal(removeLocationLines('Old Kent Road 51.4545,-2.5879', '51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879');
   });
 });
