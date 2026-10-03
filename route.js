@@ -167,16 +167,31 @@ export function mapRoute(plan, doneKeys, formatTime) {
  * A warning that time is running out.
  *
  * @typedef {object} TimeWarning
+ * @property {'short' | 'late' | 'passed'} kind Why it warns: short of time before the deadline, running late for the plan, or past the deadline.
  * @property {string} message What to tell the team, which depends on whether there's a finish.
  * @property {number} minutesLeft Minutes until the deadline, rounded up (0 once it has passed).
  * @property {number} minutesBehind Whole minutes the team is behind the plan (0 if on time).
  */
 
 /**
+ * Whether a plan was made for today. The plan's times are on the day it was
+ * made, so a plan from an earlier day needs planning again.
+ *
+ * @param {import('./setup.js').SavedPlan} plan The plan.
+ * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @returns {boolean} Whether the plan's deadline is on the same local day as `now`.
+ */
+export function isPlanForToday(plan, now) {
+  return new Date(plan.deadline).toDateString() === new Date(now).toDateString();
+}
+
+/**
  * Works out whether to warn the team that time is running out. It warns when
- * the time left before the deadline is down to the safety margin, or when
- * the team is running late for the next stop by enough to push the end of
- * the route into the safety margin.
+ * the time left before the deadline is down to the safety margin (or the plan
+ * already ends inside it), when the team is at least a minute late for the
+ * next stop and that pushes the end of the route into the safety margin, or
+ * once the deadline has passed. It doesn't warn about a plan from an earlier
+ * day, whose times no longer apply.
  *
  * @param {import('./setup.js').SavedPlan} plan The plan.
  * @param {string[]} doneKeys Keys of the locations whose selfie has been taken.
@@ -184,9 +199,12 @@ export function mapRoute(plan, doneKeys, formatTime) {
  * @returns {TimeWarning | null} The warning, or `null` if there's enough time.
  * @example
  * timeWarning(plan, [], deadline - 10 * 60_000);
- * // { message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: 0 }
+ * // { kind: 'short', message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: 0 }
  */
 export function timeWarning(plan, doneKeys, now) {
+  if (!isPlanForToday(plan, now)) {
+    return null;
+  }
   const marginMs = plan.settings.safetyMarginSeconds * 1000;
   const leftMs = plan.deadline - now;
   const minutesLeft = Math.max(0, Math.ceil(leftMs / 60000));
@@ -197,8 +215,10 @@ export function timeWarning(plan, doneKeys, now) {
   const behindMs = next === -1 ? 0 : Math.max(0, now - plan.arrivalTimes[next]);
   const minutesBehind = Math.floor(behindMs / 60000);
 
-  const isShortOfTime = leftMs <= marginMs;
-  const isRunningLate = plan.endEta + behindMs > plan.deadline - marginMs;
+  // A plan can already end inside the safety margin, such as when even the
+  // walk to the finish doesn't fit, which counts as short of time.
+  const isShortOfTime = leftMs <= marginMs || plan.endEta > plan.deadline - marginMs;
+  const isRunningLate = minutesBehind >= 1 && plan.endEta + behindMs > plan.deadline - marginMs;
   // With every location ticked off and no finish to reach, there's nothing
   // to hurry for. An empty route isn't enough, because it can also mean
   // nothing fits before the deadline.
@@ -207,17 +227,22 @@ export function timeWarning(plan, doneKeys, now) {
     return null;
   }
 
-  let message;
+  const plural = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
   if (leftMs <= 0) {
-    message = plan.finish ? 'The deadline has passed. Head to the finish now.' : "The deadline has passed. Time's up.";
-  } else {
-    const time = `${minutesLeft} ${minutesLeft === 1 ? 'minute' : 'minutes'} until the deadline`;
-    message = plan.finish ? `Head to the finish now: ${time}.` : `Last few selfies, time's nearly up: ${time}.`;
-    if (!isShortOfTime) {
-      message = `Running ${minutesBehind} ${minutesBehind === 1 ? 'minute' : 'minutes'} behind plan, so the route may not fit. Re-plan from here to see what still fits.`;
-    }
+    const message = plan.finish ? 'The deadline has passed. Head to the finish now.' : "The deadline has passed. Time's up.";
+    return { kind: 'passed', message, minutesLeft, minutesBehind };
   }
-  return { message, minutesLeft, minutesBehind };
+  if (isShortOfTime) {
+    const time = `${plural(minutesLeft, 'minute')} until the deadline`;
+    const message = plan.finish ? `Head to the finish now: ${time}.` : `Last few selfies, time's nearly up: ${time}.`;
+    return { kind: 'short', message, minutesLeft, minutesBehind };
+  }
+  return {
+    kind: 'late',
+    message: `Running ${plural(minutesBehind, 'minute')} behind plan, so the route may not fit. Re-plan from here to see what still fits.`,
+    minutesLeft,
+    minutesBehind,
+  };
 }
 
 /**

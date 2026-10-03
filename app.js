@@ -1,4 +1,4 @@
-import { countdownText, describeRoute, formatDuration, mapRoute, progress, timeWarning, toggleDone } from './route.js';
+import { countdownText, describeRoute, formatDuration, isPlanForToday, mapRoute, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
@@ -33,6 +33,10 @@ const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('
 const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
 const timeWarningBanner = /** @type {HTMLDivElement} */ (document.getElementById('time-warning'));
 const timeWarningText = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-text'));
+const timeWarningAlert = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-alert'));
+
+/** The kind of time warning last announced to screen readers, or `null` if none is showing. */
+let announcedWarningKind = null;
 const countdown = /** @type {HTMLSpanElement} */ (document.getElementById('countdown'));
 const offlineBadge = /** @type {HTMLSpanElement} */ (document.getElementById('offline-badge'));
 const countdownDeadline = /** @type {HTMLSpanElement} */ (document.getElementById('countdown-deadline'));
@@ -272,11 +276,15 @@ function showTime() {
  */
 function showTimeWarning() {
   const warning = state.plan?.settings ? timeWarning(state.plan, state.doneKeys, Date.now()) : null;
-  const message = warning?.message ?? '';
-  if (timeWarningText.textContent !== message) {
-    timeWarningText.textContent = message;
-  }
+  timeWarningText.textContent = warning?.message ?? '';
   timeWarningBanner.classList.toggle('hidden', warning === null);
+  // The banner's minutes change every minute, so screen readers are only
+  // alerted when the kind of warning changes.
+  const kind = warning?.kind ?? null;
+  if (kind !== announcedWarningKind) {
+    timeWarningAlert.textContent = warning?.message ?? '';
+    announcedWarningKind = kind;
+  }
 }
 
 /** Shows the current plan as a list of stops, then any skipped and done locations. */
@@ -302,6 +310,12 @@ function showPlan() {
   const locations = (count) => (count === 1 ? 'location' : 'locations');
   const visiting = done === 0 ? `${stopsToVisit} of ${total} ${locations(total)}` : `${stopsToVisit} of ${remaining} ${locations(remaining)} still to do`;
   const summary = element('p', 'text-sm', remaining === 0 && total > 0 ? `All ${total} selfies done!` : `Visiting ${visiting}, ${ending}.`);
+  // A plan's times are on the day it was made, so an older plan needs planning again.
+  if (!isPlanForToday(plan, Date.now())) {
+    summary.prepend(
+      element('strong', 'mb-1 block text-danger', 'This route was planned on an earlier day, so its times are out of date. Press Plan route to plan for today.'),
+    );
+  }
   const counter = element('p', 'mt-1 text-sm font-semibold text-accent-ink', `Selfies done: ${done} of ${total}`);
   counter.setAttribute('aria-live', 'polite');
 

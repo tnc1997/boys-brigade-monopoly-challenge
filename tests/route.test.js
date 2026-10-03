@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { countdownText, describeRoute, directionsUrl, formatDuration, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
+import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -184,7 +184,7 @@ describe('timeWarning', () => {
   test('tells the team to head to the finish when the time left is down to the safety margin', () => {
     const plan = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
     const warning = timeWarning(plan, [], plan.deadline - minutes(10));
-    assert.deepEqual(warning, { message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: warning.minutesBehind });
+    assert.deepEqual(warning, { kind: 'short', message: 'Head to the finish now: 10 minutes until the deadline.', minutesLeft: 10, minutesBehind: warning.minutesBehind });
   });
 
   test("says time's nearly up when there's no finish", () => {
@@ -232,6 +232,40 @@ describe('timeWarning', () => {
       assert.ok(warning, `no warning ${finishText ? 'with' : 'without'} a finish`);
       assert.equal(warning.minutesLeft, 5);
     }
+  });
+
+  test("doesn't say the team is behind until they're at least a minute late", () => {
+    const plan = savedPlan({ startTimeText: '15:10' });
+    const spareMinutes = plan.spareSeconds / 60;
+    // Late enough to push the route into the margin, but under a minute.
+    const tightPlan = { ...plan, endEta: plan.deadline - plan.settings.safetyMarginSeconds * 1000 };
+    assert.equal(timeWarning(tightPlan, [], tightPlan.arrivalTimes[0] + 30000), null);
+    assert.equal(timeWarning(tightPlan, [], tightPlan.arrivalTimes[0] + minutes(1)).kind, 'late');
+    assert.ok(spareMinutes >= 0);
+  });
+
+  test('warns straight away when the plan already ends inside the safety margin', () => {
+    // The finish is too far to reach before the deadline minus the margin.
+    const plan = savedPlan({ startTimeText: '15:30', finishText: 'Far away 51.5300,-2.7000' });
+    assert.ok(plan.spareSeconds < 0);
+    const warning = timeWarning(plan, [], plan.startTime);
+    assert.equal(warning.kind, 'short');
+    assert.match(warning.message, /^Head to the finish now/);
+  });
+
+  test('gives each kind of warning', () => {
+    const plan = savedPlan({ startTimeText: '15:10' });
+    assert.equal(timeWarning(plan, [], plan.deadline - minutes(5)).kind, 'short');
+    assert.equal(timeWarning(plan, [], plan.deadline + minutes(5)).kind, 'passed');
+    assert.equal(timeWarning(plan, [], plan.arrivalTimes[0] + minutes(plan.spareSeconds / 60 + 2)).kind, 'late');
+  });
+
+  test("doesn't warn about a plan from an earlier day", () => {
+    const plan = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
+    const nextMorning = plan.deadline + minutes(17 * 60);
+    assert.equal(isPlanForToday(plan, nextMorning), false);
+    assert.equal(timeWarning(plan, [], nextMorning), null);
+    assert.equal(isPlanForToday(plan, plan.startTime), true);
   });
 
   test('says when the deadline has passed', () => {
