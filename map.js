@@ -133,9 +133,12 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
     marker.bindPopup(popup).addTo(routeLayer);
   }
   // Fit the route itself, so far-off skipped locations (or new ones) don't
-  // zoom the map out so far that the stops overlap.
+  // zoom the map out so far that the stops overlap. With too little route
+  // to fit, use the plan's other places, and only fit new locations when
+  // there's nothing else, such as before the first plan.
   const onRoute = markers.filter(({ kind }) => kind !== 'skipped' && kind !== 'new');
-  const fitted = onRoute.length > 1 ? onRoute : markers;
+  const planned = markers.filter(({ kind }) => kind !== 'new');
+  const fitted = onRoute.length > 1 ? onRoute : planned.length > 0 ? planned : markers;
   if (shouldFit && fitted.length > 0) {
     map.fitBounds(
       fitted.map(({ location }) => [location.lat, location.lng]),
