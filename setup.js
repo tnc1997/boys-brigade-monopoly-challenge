@@ -26,14 +26,14 @@ import { SPEED_RANGE } from './settings.js';
  * @property {string | null} error What stops planning, or `null` if a plan was made.
  * @property {import('./locations.js').ParsedLocationLine[]} lines Every non-blank line of the location list with the result of parsing it.
  * @property {import('./locations.js').ParsedLocationLine[]} invalidLines Lines of the location list that couldn't be used. They don't stop planning.
- * @property {SearchMatch[]} matches What each looked-up address or place name matched, so the team can check them.
+ * @property {SearchMatch[]} matches What the Start and Finish fields matched when they're addresses or place names, so the team can check them. Lines of the location list show their own matches.
  */
 
 /**
- * What a looked-up address or place name matched.
+ * What an address or place name in the Start or Finish field matched.
  *
  * @typedef {object} SearchMatch
- * @property {string} source Where it was typed, like `Line 3`, `Start` or `Finish`.
+ * @property {'Start' | 'Finish'} source Which field it was typed in.
  * @property {string} label The location's label.
  * @property {string} matchedName The name of the place that was found.
  */
@@ -79,15 +79,22 @@ export function timeToday(time, now) {
 export function planFromSetup({ setup, settings, now, doneKeys = [], from = null, searchResults = {} }) {
   const lines = parseLocations(setup.locationsText, { searchResults });
   const invalidLines = lines.filter(({ result }) => !result.isValid);
+  // The Start and Finish fields are parsed first, so what they matched can be
+  // shown even when planning stops because of the location list.
+  const start = from
+    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
+    : parseLocation(setup.startText, { searchResults });
+  const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText, { searchResults });
   /** @type {SearchMatch[]} */
-  const matches = lines
-    .filter(({ result }) => result.isValid && result.location.matchedName)
-    .map(({ lineNumber, result }) => ({ source: `Line ${lineNumber}`, label: result.location.label, matchedName: result.location.matchedName }));
-  const addMatch = (source, parsed) => {
+  const matches = [];
+  for (const [source, parsed] of /** @type {const} */ ([
+    ['Start', from ? null : start],
+    ['Finish', finish],
+  ])) {
     if (parsed?.isValid && parsed.location.matchedName) {
       matches.push({ source, label: parsed.location.label, matchedName: parsed.location.matchedName });
     }
-  };
+  }
   const failure = (error) => ({ plan: null, error, lines, invalidLines, matches });
 
   const points = lines.filter(({ result }) => result.isValid).map(({ result }) => result.location);
@@ -95,15 +102,9 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
     return failure('Add at least one location with its coordinates.');
   }
 
-  const start = from
-    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
-    : parseLocation(setup.startText, { searchResults });
-  addMatch('Start', from ? null : start);
   if (!start.isValid) {
     return failure(`Start: ${start.error}`);
   }
-  const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText, { searchResults });
-  addMatch('Finish', finish);
   if (finish && !finish.isValid) {
     return failure(`Finish: ${finish.error}`);
   }

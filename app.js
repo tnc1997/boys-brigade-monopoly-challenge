@@ -409,13 +409,11 @@ form.addEventListener('input', (event) => {
  * @param {import('./setup.js').SearchMatch[]} matches The matches.
  */
 function showMatches(matches) {
-  // Lines show their own matches, so only the Start and Finish fields are listed here.
-  const fieldMatches = matches.filter(({ source }) => !source.startsWith('Line '));
   locationMatchesList.replaceChildren(
-    ...fieldMatches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
+    ...matches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
   );
-  locationMatches.classList.toggle('hidden', fieldMatches.length === 0);
-  locationMatches.classList.toggle('flex', fieldMatches.length > 0);
+  locationMatches.classList.toggle('hidden', matches.length === 0);
+  locationMatches.classList.toggle('flex', matches.length > 0);
 }
 
 /**
