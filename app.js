@@ -61,11 +61,14 @@ const pinForm = /** @type {HTMLFormElement} */ (document.getElementById('pin-for
 const pinLabel = /** @type {HTMLInputElement} */ (document.getElementById('pin-label'));
 const pinCoordinates = /** @type {HTMLParagraphElement} */ (document.getElementById('pin-coordinates'));
 
-/** What the line under the map says until a pin is dropped or removed. */
+/** What the line under the map says until a pin is dropped. */
 const PIN_HINT = 'Long-press the map to add a location there.';
 
 /** Where the pin being named was dropped, or `null` if there isn't one. */
 let droppedPin = null;
+
+/** The key of the location the line under the map says was just added, or `null` if it shows the hint. */
+let addedPinKey = null;
 
 /** The map, created the first time the Map tab is shown, because Leaflet needs a visible container. */
 let routeMap = null;
@@ -202,6 +205,10 @@ function showLines(lines) {
 function previewLines() {
   const lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults });
   showLines(lines);
+  // Stop saying a pin was added once its line has been deleted.
+  if (addedPinKey !== null && !lines.some(({ result }) => result.isValid && result.location.key === addedPinKey)) {
+    showPinStatus(PIN_HINT);
+  }
   // Only redraw the map when the locations not in the route yet change, or
   // are renamed, so typing doesn't keep rebuilding it or closing an open
   // popup.
@@ -726,9 +733,11 @@ function updateMap(lines = parseLocations(state.setup.locationsText, { searchRes
  * Shows a message under the map about dropping pins.
  *
  * @param {string} message The message.
+ * @param {string | null} [addedKey] The key of the location the message says was added, if it does.
  */
-function showPinStatus(message) {
+function showPinStatus(message, addedKey = null) {
   pinStatus.textContent = message;
+  addedPinKey = addedKey;
 }
 
 /**
@@ -787,7 +796,7 @@ pinDialog.addEventListener('close', () => {
   }
   saveLocationsText(addLocationLine(state.setup.locationsText, result.line));
   const action = state.plan?.settings ? 'Re-plan from here' : 'Plan route';
-  showPinStatus(`Added ${result.location.label} to the location list. Press ${action} to include it in the route.`);
+  showPinStatus(`Added ${result.location.label} to the location list. Press ${action} to include it in the route.`, result.location.key);
 });
 
 for (const tab of tabs) {
