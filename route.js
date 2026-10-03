@@ -199,8 +199,10 @@ export function timeWarning(plan, doneKeys, now) {
 
   const isShortOfTime = leftMs <= marginMs;
   const isRunningLate = plan.endEta + behindMs > plan.deadline - marginMs;
-  // With every stop done and no finish to reach, there's nothing to hurry for.
-  const isAllDone = next === -1 && !plan.finish;
+  // With every location ticked off and no finish to reach, there's nothing
+  // to hurry for. An empty route isn't enough, because it can also mean
+  // nothing fits before the deadline.
+  const isAllDone = plan.points.every(({ key }) => done.has(key)) && !plan.finish;
   if ((!isShortOfTime && !isRunningLate) || (isAllDone && leftMs > 0)) {
     return null;
   }
