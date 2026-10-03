@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { addLocationLine, parseGoogleMapsUrl, parseLocation, parseLocations, pinLine } from '../locations.js';
+import { addLocationLine, locationKey, parseGoogleMapsUrl, parseLocation, parseLocations, pinLine } from '../locations.js';
 
 describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
@@ -264,7 +264,10 @@ describe('pinLine', () => {
   });
 
   test('works on the prime meridian, where a longitude can round to -0', () => {
-    assert.equal(pinLine('Greenwich', { lat: 51.4779, lng: -0.0000001 }).line, 'Greenwich 51.477900,-0.000000');
+    const result = pinLine('Greenwich', { lat: 51.4779, lng: -0.0000001 });
+    assert.equal(result.isValid, true);
+    assert.equal(result.line, 'Greenwich 51.477900,0.000000');
+    assert.equal(parseLocation(result.line).location.key, result.location.key);
   });
 
   test('keeps a label with a colon or numbers', () => {
@@ -294,5 +297,20 @@ describe('addLocationLine', () => {
   test("doesn't add a blank line to an empty list or one that ends with a new line", () => {
     assert.equal(addLocationLine('', 'Pin 51.450000,-2.590000'), 'Pin 51.450000,-2.590000');
     assert.equal(addLocationLine('Old Kent Road 51.4545,-2.5879\n', 'Pin 51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\nPin 51.450000,-2.590000');
+  });
+});
+
+describe('locationKey', () => {
+  test('writes the coordinates to 6 decimal places', () => {
+    assert.equal(locationKey(51.45174, -2.6034), '51.451740,-2.603400');
+  });
+
+  test('gives the same key for tiny negative values that round to zero', () => {
+    assert.equal(locationKey(51.5, -0.0000001), '51.500000,0.000000');
+    assert.equal(locationKey(51.5, -0.0000001), locationKey(51.5, 0));
+  });
+
+  test('matches the key parsed locations get', () => {
+    assert.equal(parseLocation('Cabot Tower 51.45174,-2.6034').location.key, locationKey(51.45174, -2.6034));
   });
 });
