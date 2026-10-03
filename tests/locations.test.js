@@ -275,9 +275,13 @@ describe('pinLine', () => {
   });
 
   test('needs a label', () => {
-    for (const label of ['', '   ', '\n']) {
+    for (const label of ['', '   ', '\n', '-', ' , ; ']) {
       assert.deepEqual(pinLine(label, { lat: 51.45, lng: -2.59 }), { isValid: false, error: 'Enter a name for the location.' });
     }
+  });
+
+  test('drops separators around the label, as reading the line does', () => {
+    assert.equal(pinLine(' - Bandstand, ', { lat: 51.45, lng: -2.59 }).line, 'Bandstand 51.450000,-2.590000');
   });
 
   test('rejects a label that would stop the line being read', () => {

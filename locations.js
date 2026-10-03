@@ -287,7 +287,9 @@ export function parseLocations(text, { searchResults = {} } = {}) {
  * // { isValid: true, line: 'Cabot Tower 51.451740,-2.603400', location: { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' } }
  */
 export function pinLine(label, { lat, lng }) {
-  const name = label.replace(/\s+/g, ' ').trim();
+  // Separators around the name are dropped when the line is read, so drop
+  // them here too, and treat a name of only separators, like "-", as blank.
+  const name = label.replace(/\s+/g, ' ').replace(SEPARATORS, '');
   if (!name) {
     return { isValid: false, error: 'Enter a name for the location.' };
   }
