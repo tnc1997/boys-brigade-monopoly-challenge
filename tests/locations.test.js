@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { addLocationLine, parseGoogleMapsUrl, parseLocation, parseLocations, pinLine, removeLocationLines } from '../locations.js';
+import { addLocationLine, parseGoogleMapsUrl, parseLocation, parseLocations, pinLine } from '../locations.js';
 
 describe('parseLocation', () => {
   const assertLocation = (line, expected) => {
@@ -294,21 +294,5 @@ describe('addLocationLine', () => {
   test("doesn't add a blank line to an empty list or one that ends with a new line", () => {
     assert.equal(addLocationLine('', 'Pin 51.450000,-2.590000'), 'Pin 51.450000,-2.590000');
     assert.equal(addLocationLine('Old Kent Road 51.4545,-2.5879\n', 'Pin 51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\nPin 51.450000,-2.590000');
-  });
-});
-
-describe('removeLocationLines', () => {
-  test('removes the lines for the location and keeps the rest as typed', () => {
-    const text = 'Old Kent Road 51.4545,-2.5879\n\nPin 51.450000,-2.590000\nTemple Meads 51.4492,-2.5813\nAgain 51.45,-2.59\nnot a location';
-    assert.equal(removeLocationLines(text, '51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879\n\nTemple Meads 51.4492,-2.5813\nnot a location');
-  });
-
-  test('removes a looked-up address by the key of its search result', () => {
-    const searchResults = { 'queen square, bristol': { isFound: true, lat: 51.45, lng: -2.5938, name: 'Queen Square, Bristol' } };
-    assert.equal(removeLocationLines('Queen Square, Bristol\nPin 51.450000,-2.590000', '51.450000,-2.593800', { searchResults }), 'Pin 51.450000,-2.590000');
-  });
-
-  test('leaves the list alone when the location is not in it', () => {
-    assert.equal(removeLocationLines('Old Kent Road 51.4545,-2.5879', '51.450000,-2.590000'), 'Old Kent Road 51.4545,-2.5879');
   });
 });

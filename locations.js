@@ -296,26 +296,3 @@ export function pinLine(label, { lat, lng }) {
 export function addLocationLine(text, line) {
   return text === '' || text.endsWith('\n') ? `${text}${line}` : `${text}\n${line}`;
 }
-
-/**
- * Removes every line of the location list for a location, such as a pin
- * dropped by mistake. Other lines, including blank ones, are kept as typed.
- *
- * @param {string} text The location list as typed.
- * @param {string} key The location's key (see {@link Location}).
- * @param {object} [options] Search results for lines without coordinates.
- * @param {import('./search.js').SearchResults} [options.searchResults] Search results by {@link searchKey}.
- * @returns {string} The location list without the location's lines.
- * @example
- * removeLocationLines('Old Kent Road 51.4545,-2.5879\nCabot Tower 51.451740,-2.603400', '51.451740,-2.603400');
- * // 'Old Kent Road 51.4545,-2.5879'
- */
-export function removeLocationLines(text, key, { searchResults = {} } = {}) {
-  return text
-    .split(/\r?\n/)
-    .filter((line) => {
-      const result = line.trim() === '' ? null : parseLocation(line, { searchResults });
-      return !(result?.isValid && result.location.key === key);
-    })
-    .join('\n');
-}
