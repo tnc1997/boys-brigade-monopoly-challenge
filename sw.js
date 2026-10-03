@@ -39,17 +39,27 @@ const LIBRARY_FILES = [
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
 ];
 
+/**
+ * Saves a library file if it loads successfully. Failing to load it doesn't
+ * throw, so the app's own files can still be saved; it's saved later, the
+ * first time the page loads it.
+ *
+ * @param {Cache} cache The cache to save it in.
+ * @param {string} url The library file's URL.
+ * @returns {Promise<void>} Resolves once it's saved, or once saving it has failed.
+ */
+function saveLibraryFile(cache, url) {
+  // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
+  return fetch(url, { mode: 'cors' })
+    .then((response) => (response.ok ? cache.put(url, response) : undefined))
+    .catch(() => {});
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) =>
-        Promise.all([
-          cache.addAll(APP_FILES),
-          // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
-          ...LIBRARY_FILES.map((url) => fetch(url, { mode: 'cors' }).then((response) => cache.put(url, response))),
-        ]),
-      )
+      .then((cache) => Promise.all([cache.addAll(APP_FILES), ...LIBRARY_FILES.map((url) => saveLibraryFile(cache, url))]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -71,7 +81,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (LIBRARY_FILES.includes(url.href)) {
-    event.respondWith(caches.match(url.href).then((saved) => saved ?? fetch(request)));
+    // Use the saved copy, or load it and save it if it wasn't saved at install.
+    const saved = caches.match(url.href);
+    const response = saved.then((match) => match ?? fetch(request));
+    event.respondWith(response.then((match) => match.clone()));
+    event.waitUntil(
+      Promise.all([saved, response])
+        .then(([match, loaded]) => (!match && loaded.ok ? caches.open(CACHE_NAME).then((cache) => cache.put(url.href, loaded)) : undefined))
+        .catch(() => {}),
+    );
     return;
   }
 
@@ -79,12 +97,15 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) {
     return;
   }
-  const network = fetch(request).then((response) => {
-    if (response.ok) {
-      const copy = response.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  const network = fetch(request);
+  // Refresh the saved copy, keeping the service worker alive until it's
+  // written. The copy is taken before the response is used below.
+  const refresh = network.then((response) => {
+    if (!response.ok) {
+      return undefined;
     }
-    return response;
+    const copy = response.clone();
+    return caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
   });
   // Without a saved copy, opening the page falls back to the saved page;
   // anything else fails as it would without the service worker.
@@ -95,7 +116,7 @@ self.addEventListener('fetch', (event) => {
   // With a weak signal the network can hang, so use the saved copy after a
   // few seconds. The network request carries on and still refreshes it.
   const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS)).then(saved);
-  event.waitUntil(network.catch(() => {}));
+  event.waitUntil(refresh.catch(() => {}));
   event.respondWith(
     Promise.race([network, timeout.then((match) => match ?? network)])
       .catch(saved)
