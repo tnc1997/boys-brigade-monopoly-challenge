@@ -32,7 +32,8 @@ import { plan } from './planner.js';
  * What a looked-up address or place name matched.
  *
  * @typedef {object} SearchMatch
- * @property {string} source Where it was typed, like `Line 3`, `Start` or `Finish`.
+ * @property {'line' | 'start' | 'finish'} kind Which field it was typed in: a line of the location list, the Start field or the Finish field.
+ * @property {string} source Where it was typed, for showing to the team, like `Line 3`, `Start` or `Finish`.
  * @property {string} label The location's label.
  * @property {string} matchedName The name of the place that was found.
  */
@@ -81,10 +82,10 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   /** @type {SearchMatch[]} */
   const matches = lines
     .filter(({ result }) => result.isValid && result.location.matchedName)
-    .map(({ lineNumber, result }) => ({ source: `Line ${lineNumber}`, label: result.location.label, matchedName: result.location.matchedName }));
-  const addMatch = (source, parsed) => {
+    .map(({ lineNumber, result }) => ({ kind: 'line', source: `Line ${lineNumber}`, label: result.location.label, matchedName: result.location.matchedName }));
+  const addMatch = (kind, source, parsed) => {
     if (parsed?.isValid && parsed.location.matchedName) {
-      matches.push({ source, label: parsed.location.label, matchedName: parsed.location.matchedName });
+      matches.push({ kind, source, label: parsed.location.label, matchedName: parsed.location.matchedName });
     }
   };
   const failure = (error) => ({ plan: null, error, lines, invalidLines, matches });
@@ -97,12 +98,12 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   const start = from
     ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
     : parseLocation(setup.startText, { searchResults });
-  addMatch('Start', from ? null : start);
+  addMatch('start', 'Start', from ? null : start);
   if (!start.isValid) {
     return failure(`Start: ${start.error}`);
   }
   const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText, { searchResults });
-  addMatch('Finish', finish);
+  addMatch('finish', 'Finish', finish);
   if (finish && !finish.isValid) {
     return failure(`Finish: ${finish.error}`);
   }

@@ -370,7 +370,7 @@ form.addEventListener('input', (event) => {
  */
 function showMatches(matches) {
   // Lines show their own matches, so only the Start and Finish fields are listed here.
-  const fieldMatches = matches.filter(({ source }) => !source.startsWith('Line '));
+  const fieldMatches = matches.filter(({ kind }) => kind !== 'line');
   locationMatchesList.replaceChildren(
     ...fieldMatches.map(({ source, label, matchedName }) => element('li', 'break-words', `${source}: ${label} → ${matchedName}`)),
   );

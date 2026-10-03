@@ -141,15 +141,15 @@ describe('planFromSetup with addresses and place names', () => {
     assert.equal(plan.points.length, 2);
     assert.equal(plan.finish.lat, 51.4492);
     assert.deepEqual(matches, [
-      { source: 'Line 2', label: 'Queen Square, Bristol', matchedName: 'Queen Square, City Centre, Bristol' },
-      { source: 'Finish', label: 'Temple Meads', matchedName: 'Bristol Temple Meads' },
+      { kind: 'line', source: 'Line 2', label: 'Queen Square, Bristol', matchedName: 'Queen Square, City Centre, Bristol' },
+      { kind: 'finish', source: 'Finish', label: 'Temple Meads', matchedName: 'Bristol Temple Meads' },
     ]);
   });
 
   test('looks up the start too', () => {
     const { plan, matches } = planFromSetup({ ...setupWith({ startText: 'Queen Square, Bristol' }), searchResults });
     assert.equal(plan.start.lat, 51.4504);
-    assert.deepEqual(matches.map(({ source }) => source), ['Start']);
+    assert.deepEqual(matches.map(({ kind, source }) => [kind, source]), [['start', 'Start']]);
   });
 });
 
