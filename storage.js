@@ -148,7 +148,9 @@ export function saveState(state, storage = browserStorage()) {
 
 /**
  * Moves state saved under a legacy key to the current key, so it isn't lost
- * when the key changes.
+ * when the key changes. The legacy key is only removed once the state is
+ * saved under the current key, and the state is used even if moving it
+ * fails (for example when storage is full), so it's never lost.
  *
  * @param {StateStorage | null | undefined} storage Where the state is saved.
  * @returns {string | null} The legacy state's text, or `null` if there isn't any.
@@ -157,8 +159,12 @@ function moveLegacyState(storage) {
   for (const key of LEGACY_STORAGE_KEYS) {
     const text = storage?.getItem(key);
     if (text) {
-      storage.setItem(STORAGE_KEY, text);
-      storage.removeItem(key);
+      try {
+        storage.setItem(STORAGE_KEY, text);
+        storage.removeItem(key);
+      } catch {
+        // Keep the legacy key, so the move is tried again next time.
+      }
       return text;
     }
   }

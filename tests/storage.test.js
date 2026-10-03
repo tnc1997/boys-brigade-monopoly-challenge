@@ -152,6 +152,15 @@ describe('legacy storage keys', () => {
     assert.deepEqual(JSON.parse(storage.items.get(STORAGE_KEY)).doneKeys, ['51.449200,-2.581300']);
   });
 
+  test('uses the old state and keeps the old key when saving under the new key fails', () => {
+    const storage = memoryStorage({ [legacyKey]: JSON.stringify({ ...defaultState(), doneKeys: ['old'] }) });
+    storage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    assert.deepEqual(loadState(storage).doneKeys, ['old']);
+    assert.equal(storage.items.has(legacyKey), true);
+  });
+
   test('prefers state saved under the new key', () => {
     const storage = memoryStorage({
       [STORAGE_KEY]: JSON.stringify({ ...defaultState(), doneKeys: ['new'] }),
