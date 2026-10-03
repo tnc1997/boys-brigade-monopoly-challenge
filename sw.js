@@ -50,6 +50,17 @@ const LIBRARY_FILES = [
 const APP_FILE_URLS = new Set(APP_FILES.map((file) => new URL(file, self.location.href).href));
 
 /**
+ * Finds a saved copy of a file in this app's current cache only, never in
+ * other sites' caches, which share the same storage.
+ *
+ * @param {string} key The URL it's saved under.
+ * @returns {Promise<Response | undefined>} The saved copy, if there is one.
+ */
+async function matchSaved(key) {
+  return (await caches.open(CACHE_NAME)).match(key);
+}
+
+/**
  * Saves a successful response in the cache. Failed responses aren't saved.
  *
  * @param {string} key The URL to save it under.
@@ -77,7 +88,10 @@ async function saveLibraryFile(url) {
     if (await cache.match(url)) {
       return;
     }
-    const existing = await caches.match(url);
+    // Only this app's caches are searched, since other sites share the storage.
+    const names = (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX));
+    const copies = await Promise.all(names.map(async (name) => (await caches.open(name)).match(url)));
+    const existing = copies.find((copy) => copy?.ok);
     // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
     await saveResponse(url, existing ?? (await fetch(url, { mode: 'cors' })));
   } catch {
@@ -120,7 +134,7 @@ self.addEventListener('fetch', (event) => {
   if (LIBRARY_FILES.includes(url.href)) {
     // Use the saved copy, or load it and save a copy if it wasn't saved yet.
     event.respondWith(
-      caches.match(url.href).then(
+      matchSaved(url.href).then(
         (saved) =>
           saved ??
           fetch(request).then((loaded) => {
@@ -148,15 +162,24 @@ self.addEventListener('fetch', (event) => {
   });
   event.waitUntil(network.then(() => saveResponse(key, copy)).catch(() => {}));
   // Without a saved copy, opening the page falls back to the saved page;
-  // anything else fails as it would without the service worker.
-  const saved = () =>
-    caches.match(key).then((match) => match ?? (request.mode === 'navigate' ? caches.match(new URL('index.html', self.location.href).href) : undefined));
+  // anything else fails as it would without the service worker. The lookup
+  // runs at most once per request.
+  let savedLookup;
+  const saved = () => {
+    savedLookup ??= matchSaved(key).then((match) => match ?? (request.mode === 'navigate' ? matchSaved(new URL('index.html', self.location.href).href) : undefined));
+    return savedLookup;
+  };
   // With a weak signal the network can hang, so use the saved copy after a
   // few seconds. The network request carries on and still refreshes it.
-  const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS)).then(saved);
-  // An error from the server (such as a 404 or 500 during a GitHub Pages
-  // problem) is treated like no signal, using the saved copy if there is one.
-  const usable = network.then(async (loaded) => (loaded.ok ? loaded : ((await saved()) ?? loaded)));
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(resolve, NETWORK_TIMEOUT_MS);
+  }).then(saved);
+  // A server error (5xx, such as during a GitHub Pages problem) is treated
+  // like no signal, using the saved copy if there is one. Other responses,
+  // including redirects and deliberate 404s, are passed on as they are.
+  const usable = network.then(async (loaded) => (loaded.status >= 500 ? ((await saved()) ?? loaded) : loaded));
+  network.finally(() => clearTimeout(timer)).catch(() => {});
   event.respondWith(
     Promise.race([usable, timeout.then((match) => match ?? usable)])
       .catch(saved)

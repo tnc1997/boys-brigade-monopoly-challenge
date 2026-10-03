@@ -52,7 +52,7 @@ describe('service worker saving', () => {
   });
 
   test('reuses a saved copy of Leaflet before downloading it, and tries again when activating', () => {
-    assert.match(sw, /const existing = await caches\.match\(url\);/);
+    assert.match(sw, /const existing = copies\.find\(\(copy\) => copy\?\.ok\);/);
     const activate = sw.slice(sw.indexOf("self.addEventListener('activate'"), sw.indexOf("self.addEventListener('fetch'"));
     assert.ok(activate.indexOf('saveLibraryFile') < activate.indexOf('caches.delete'), 'Leaflet is saved before old caches are deleted');
   });
@@ -73,7 +73,13 @@ describe('service worker caches', () => {
     assert.match(sw, /const CACHE_NAME = `\$\{CACHE_PREFIX\}v\d+`;/);
   });
 
-  test('uses the saved copy when the server returns an error', () => {
-    assert.match(sw, /loaded\.ok \? loaded : \(\(await saved\(\)\) \?\? loaded\)/);
+  test('uses the saved copy only for server errors, passing redirects and 404s on', () => {
+    assert.match(sw, /loaded\.status >= 500 \? \(\(await saved\(\)\) \?\? loaded\) : loaded/);
+    assert.match(sw, /Promise\.race\(\[usable,/);
+  });
+
+  test("only reads this app's caches", () => {
+    assert.doesNotMatch(sw, /\bcaches\.match\(/);
+    assert.match(sw, /name\.startsWith\(CACHE_PREFIX\)\)/);
   });
 });
