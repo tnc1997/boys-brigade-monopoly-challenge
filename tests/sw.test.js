@@ -52,7 +52,7 @@ describe('service worker saving', () => {
   });
 
   test('reuses a saved copy of Leaflet before downloading it, and tries again when activating', () => {
-    assert.match(sw, /const existing = await caches\.match\(url\);/);
+    assert.match(sw, /const existing = copies\.find\(\(copy\) => copy\?\.ok\);/);
     const activate = sw.slice(sw.indexOf("self.addEventListener('activate'"), sw.indexOf("self.addEventListener('fetch'"));
     assert.ok(activate.indexOf('saveLibraryFile') < activate.indexOf('caches.delete'), 'Leaflet is saved before old caches are deleted');
   });
@@ -69,11 +69,30 @@ describe('service worker saving', () => {
 
 describe('service worker caches', () => {
   test("only deletes this app's own old caches, since other sites share the storage", () => {
-    assert.match(sw, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);
+    assert.match(sw, /const names = await appCacheNames\(\);\s*await Promise\.all\(names\.filter\(\(name\) => name !== CACHE_NAME\)/);
     assert.match(sw, /const CACHE_NAME = `\$\{CACHE_PREFIX\}v\d+`;/);
   });
 
-  test('uses the saved copy when the server returns an error', () => {
-    assert.match(sw, /loaded\.ok \? loaded : \(\(await saved\(\)\) \?\? loaded\)/);
+  test('uses the saved copy for error responses (4xx and 5xx), passing redirects on', () => {
+    assert.match(sw, /loaded\.status >= 400 \? \(\(await saved\(\)\) \?\? loaded\) : loaded/);
+    assert.match(sw, /Promise\.race\(\[usable,/);
+  });
+
+  test("only reads this app's caches, without creating them", () => {
+    // Every lookup names the cache to search; a bare caches.match would
+    // search other sites' caches too.
+    const lookups = [...sw.matchAll(/caches\.match\(([^)]*)\)/g)].map(([, args]) => args);
+    assert.ok(lookups.length > 0);
+    for (const args of lookups) {
+      assert.match(args, /\{ cacheName(: CACHE_NAME)? \}/, `caches.match(${args}) doesn't name a cache`);
+    }
+    assert.match(sw, /const prefixes = \[CACHE_PREFIX, \.\.\.LEGACY_CACHE_PREFIXES\];/);
+  });
+});
+
+describe('service worker cache names', () => {
+  test('uses the new name, and treats caches with the old name as its own', () => {
+    assert.match(sw, /const CACHE_PREFIX = 'monopoly-challenge-route-planner-';/);
+    assert.match(sw, /const LEGACY_CACHE_PREFIXES = \['monopoly-challenge-planner-'\];/);
   });
 });

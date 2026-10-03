@@ -1,8 +1,8 @@
 {
-  "name": "boys-brigade-monopoly-challenge",
+  "name": "boys-brigade-monopoly-challenge-route-planner",
   "version": "0.0.0",
   "private": true,
-  "description": "Route planner for the Boys' Brigade Monopoly Challenge",
+  "description": "An unofficial route planner for the Boys' Brigade Monopoly Challenge",
   "type": "module",
   "scripts": {
     "build": "tailwindcss --input tailwind.css --output styles.css --minify",

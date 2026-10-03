@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* A breakpoint for phones wider than the smallest (320 px) ones. */
+@theme {
+  --breakpoint-xs: 22.5rem;
+}
+
 /*
  * Colour tokens, used as Tailwind colours (e.g. bg-surface, text-muted).
  * Each points at a theme variable that switches with the system theme.
