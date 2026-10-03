@@ -73,7 +73,14 @@ export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded =
   // Leaflet fires contextmenu for a right-click, a long press on Android and,
   // with its tapHold option (on by default in mobile Safari), a long press on
   // iOS. It isn't fired for presses on markers, popups or the zoom buttons.
-  map.on('contextmenu', ({ latlng }) => {
+  map.on('contextmenu', ({ latlng, originalEvent }) => {
+    // The keyboard's context menu key (or Shift+F10) also fires contextmenu,
+    // at a point the team didn't choose. Browsers that report it as a pointer
+    // event give it an empty pointerType, so it's ignored. Leaflet's own
+    // tapHold events aren't pointer events, so they still count.
+    if (originalEvent?.pointerType === '') {
+      return;
+    }
     const { lat, lng } = latlng.wrap();
     onLongPress({ lat, lng });
   });
