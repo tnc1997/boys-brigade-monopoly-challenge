@@ -44,7 +44,7 @@ After planning, each address line shows what it matched, like `Line 2: Old Kent 
 
 ### 3. Follow the route
 
-- The **List** tab shows each stop in order with its ETA, the walk to it, and a **Directions** button that opens walking directions in Google Maps. Locations that don't fit are listed under **Skipped**.
+- The **List** tab shows each stop in order with its ETA, the walk to it, and a **Google Maps** button that opens walking directions. On an iPhone, iPad or Mac there's also an **Apple Maps** button. Locations that don't fit are listed under **Skipped**.
 - The **Map** tab shows the numbered stops, the route line, the finish, skipped locations in grey, and your position as a blue dot.
 - After each selfie, tap **Mark selfie done**. The counter shows how many are done.
 - The header shows a countdown to the deadline. A red banner warns you when time is nearly up ("Head to the finish now", or "Last few selfies" without a finish), or when you're running behind the plan.

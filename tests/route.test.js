@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { parseLocations } from '../locations.js';
-import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from '../route.js';
+import { appleMapsDirectionsUrl, countdownText, describeRoute, formatDuration, googleMapsDirectionsUrl, isAppleDevice, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -17,13 +17,28 @@ const savedPlan = (setup = {}, settings = {}) => {
   }).plan;
 };
 
-describe('directionsUrl', () => {
-  test('links to walking directions to the location', () => {
-    const url = new URL(directionsUrl({ lat: 51.4545, lng: -2.5879 }));
+describe('googleMapsDirectionsUrl', () => {
+  test('opens walking directions to the location', () => {
+    const url = new URL(googleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }));
     assert.equal(url.origin + url.pathname, 'https://www.google.com/maps/dir/');
     assert.equal(url.searchParams.get('api'), '1');
-    assert.equal(url.searchParams.get('destination'), '51.4545,-2.5879');
+    assert.equal(url.searchParams.get('destination'), '51.454500,-2.587900');
     assert.equal(url.searchParams.get('travelmode'), 'walking');
+  });
+});
+
+describe('appleMapsDirectionsUrl', () => {
+  test('opens walking directions from the current position to the location', () => {
+    assert.equal(appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }), 'https://maps.apple.com/?daddr=51.454500,-2.587900&dirflg=w');
+  });
+});
+
+describe('directions URLs near zero', () => {
+  test("never write coordinates in exponent notation, which maps apps can't read", () => {
+    const location = { lat: 51.5, lng: -5e-7 };
+    assert.equal(new URL(googleMapsDirectionsUrl(location)).searchParams.get('destination'), '51.500000,0.000000');
+    assert.equal(appleMapsDirectionsUrl(location), 'https://maps.apple.com/?daddr=51.500000,0.000000&dirflg=w');
+    assert.equal(new URL(googleMapsDirectionsUrl({ lat: 51.5, lng: 0.0000012 })).searchParams.get('destination'), '51.500000,0.000001');
   });
 });
 
@@ -44,15 +59,19 @@ describe('formatDuration', () => {
 });
 
 describe('describeRoute', () => {
-  test('describes each stop in order with its arrival time, walk time and links', () => {
+  test('describes each stop in order with its arrival time, walk time and directions URLs', () => {
     const plan = savedPlan();
     const { stops } = describeRoute(plan);
     assert.deepEqual(stops.map(({ number }) => number), [1, 2]);
     assert.deepEqual(stops.map(({ location }) => location.label), plan.order.map((index) => plan.points[index].label));
     assert.deepEqual(stops.map(({ arrivalTime }) => arrivalTime), plan.arrivalTimes);
+    // Each stop's directions go to that stop's own coordinates.
+    const coordinates = { 'Old Kent Road': '51.454500,-2.587900', 'Temple Meads': '51.449200,-2.581300' };
     for (const stop of stops) {
       assert.ok(stop.walkSeconds > 0);
-      assert.equal(stop.directionsUrl, directionsUrl(stop.location));
+      const expected = coordinates[stop.location.label];
+      assert.equal(new URL(stop.googleMapsDirectionsUrl).searchParams.get('destination'), expected, stop.location.label);
+      assert.equal(stop.appleMapsDirectionsUrl, `https://maps.apple.com/?daddr=${expected}&dirflg=w`, stop.location.label);
     }
   });
 
@@ -79,6 +98,8 @@ describe('describeRoute', () => {
     assert.equal(finish.location.label, 'Finish');
     assert.equal(finish.arrivalTime, endEta);
     assert.ok(finish.walkSeconds > 0);
+    assert.equal(new URL(finish.googleMapsDirectionsUrl).searchParams.get('destination'), '51.455600,-2.589400');
+    assert.equal(finish.appleMapsDirectionsUrl, 'https://maps.apple.com/?daddr=51.455600,-2.589400&dirflg=w');
   });
 
   test('lists the skipped locations in list order', () => {
@@ -333,5 +354,27 @@ describe('plural', () => {
 
   test('uses a given plural', () => {
     assert.equal(plural(2, 'line has a problem', 'lines have problems'), '2 lines have problems');
+  });
+});
+
+describe('isAppleDevice', () => {
+  test('recognises iPhones, iPads and Macs', () => {
+    for (const userAgent of [
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+      'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      // iPads on iPadOS 13 and later report themselves as Macs.
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+    ]) {
+      assert.equal(isAppleDevice(userAgent), true, userAgent);
+    }
+  });
+
+  test('leaves out Android and Windows', () => {
+    for (const userAgent of [
+      'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+    ]) {
+      assert.equal(isAppleDevice(userAgent), false, userAgent);
+    }
   });
 });

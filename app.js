@@ -1,4 +1,4 @@
-import { countdownText, describeRoute, formatDuration, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from './route.js';
+import { countdownText, describeRoute, formatDuration, isAppleDevice, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { addLocationLine, parseLocations, pinLine } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
@@ -319,7 +319,9 @@ function stopItem(stop, isFinish) {
   if (!isFinish) {
     links.append(doneToggle(stop.location, isDone));
   }
-  links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
+  // Apple Maps on the web may not work on other devices, such as Android.
+  const directions = [['Google Maps', stop.googleMapsDirectionsUrl], ...(isAppleDevice(navigator.userAgent) ? [['Apple Maps', stop.appleMapsDirectionsUrl]] : [])];
+  links.append(...directions.map(([app, url]) => externalLink(url, app, `Walking directions to ${stop.location.label} in ${app}`)));
   details.append(title, timing, links);
   item.append(badge, details);
   return item;
