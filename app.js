@@ -532,6 +532,9 @@ async function planRoute(from) {
       showPlan();
       showSettingsSummary();
       showPinStatus(PIN_HINT);
+    } else {
+      // Show locations that were just looked up, even though planning failed.
+      updateMap(result.lines);
     }
     return result.error;
   } finally {
