@@ -1,4 +1,4 @@
-import { countdownText, describeRoute, formatDuration, isPlanForToday, mapRoute, progress, timeWarning, toggleDone } from './route.js';
+import { countdownText, describeRoute, formatDuration, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
@@ -35,8 +35,17 @@ const timeWarningBanner = /** @type {HTMLDivElement} */ (document.getElementById
 const timeWarningText = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-text'));
 const timeWarningAlert = /** @type {HTMLParagraphElement} */ (document.getElementById('time-warning-alert'));
 
-/** The kind of time warning last announced to screen readers, or `null` if none is showing. */
-let announcedWarningKind = null;
+/**
+ * The time warning last announced to screen readers, with its numbers
+ * left out, or `null` if none is showing.
+ */
+let announcedWarning = null;
+
+/** Clears the screen-reader alert once it's been read, so it can't go stale. */
+let clearAlertTimer;
+
+/** Whether the current plan was for today when the Route section was last drawn. */
+let wasPlanForToday = true;
 const countdown = /** @type {HTMLSpanElement} */ (document.getElementById('countdown'));
 const offlineBadge = /** @type {HTMLSpanElement} */ (document.getElementById('offline-badge'));
 const countdownDeadline = /** @type {HTMLSpanElement} */ (document.getElementById('countdown-deadline'));
@@ -267,23 +276,31 @@ function showCountdown() {
 /** Updates everything that depends on the time: the countdown and the time warning. */
 function showTime() {
   showCountdown();
+  // Redraw the route when the day changes, so an older plan gets its note.
+  if (state.plan?.settings && isPlanForToday(state.plan, Date.now()) !== wasPlanForToday) {
+    showPlan();
+  }
   showTimeWarning();
 }
 
 /**
- * Shows or hides the warning that time is running out. The text is only
- * changed when it changes, so screen readers don't announce it every minute.
+ * Shows or hides the warning that time is running out. The visible banner
+ * isn't announced, because its minutes change every minute. Instead, a
+ * hidden alert is announced when the warning's wording changes, apart from
+ * its numbers, and cleared once read so it can't disagree with the banner.
  */
 function showTimeWarning() {
   const warning = state.plan?.settings ? timeWarning(state.plan, state.doneKeys, Date.now()) : null;
   timeWarningText.textContent = warning?.message ?? '';
   timeWarningBanner.classList.toggle('hidden', warning === null);
-  // The banner's minutes change every minute, so screen readers are only
-  // alerted when the kind of warning changes.
-  const kind = warning?.kind ?? null;
-  if (kind !== announcedWarningKind) {
+  const wording = warning ? warning.message.replace(/\d+/g, '#') : null;
+  if (wording !== announcedWarning) {
+    announcedWarning = wording;
     timeWarningAlert.textContent = warning?.message ?? '';
-    announcedWarningKind = kind;
+    clearTimeout(clearAlertTimer);
+    clearAlertTimer = setTimeout(() => {
+      timeWarningAlert.textContent = '';
+    }, 10000);
   }
 }
 
@@ -311,7 +328,8 @@ function showPlan() {
   const visiting = done === 0 ? `${stopsToVisit} of ${total} ${locations(total)}` : `${stopsToVisit} of ${remaining} ${locations(remaining)} still to do`;
   const summary = element('p', 'text-sm', remaining === 0 && total > 0 ? `All ${total} selfies done!` : `Visiting ${visiting}, ${ending}.`);
   // A plan's times are on the day it was made, so an older plan needs planning again.
-  if (!isPlanForToday(plan, Date.now())) {
+  wasPlanForToday = isPlanForToday(plan, Date.now());
+  if (!wasPlanForToday) {
     summary.prepend(
       element('strong', 'mb-1 block text-danger', 'This route was planned on an earlier day, so its times are out of date. Press Plan route to plan for today.'),
     );
@@ -405,7 +423,6 @@ function announcePlan(result) {
   }
   const stops = result.plan.order.length;
   const problems = result.invalidLines.length;
-  const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
   planAnnouncement.textContent = `Planned ${plural(stops, 'stop', 'stops')}.${problems > 0 ? ` ${plural(problems, 'line has a problem', 'lines have problems')}.` : ''}`;
 }
 

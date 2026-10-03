@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, progress, timeWarning, toggleDone } from '../route.js';
+import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -235,13 +235,11 @@ describe('timeWarning', () => {
   });
 
   test("doesn't say the team is behind until they're at least a minute late", () => {
+    // A plan that ends right at the safety margin, so any lateness pushes it in.
     const plan = savedPlan({ startTimeText: '15:10' });
-    const spareMinutes = plan.spareSeconds / 60;
-    // Late enough to push the route into the margin, but under a minute.
-    const tightPlan = { ...plan, endEta: plan.deadline - plan.settings.safetyMarginSeconds * 1000 };
+    const tightPlan = { ...plan, endEta: plan.deadline - plan.settings.safetyMarginSeconds * 1000, spareSeconds: 0 };
     assert.equal(timeWarning(tightPlan, [], tightPlan.arrivalTimes[0] + 30000), null);
     assert.equal(timeWarning(tightPlan, [], tightPlan.arrivalTimes[0] + minutes(1)).kind, 'late');
-    assert.ok(spareMinutes >= 0);
   });
 
   test('warns straight away when the plan already ends inside the safety margin', () => {
@@ -251,6 +249,12 @@ describe('timeWarning', () => {
     const warning = timeWarning(plan, [], plan.startTime);
     assert.equal(warning.kind, 'short');
     assert.match(warning.message, /^Head to the finish now/);
+  });
+
+  test("doesn't warn about a finish that doesn't fit before the route starts", () => {
+    const plan = savedPlan({ startTimeText: '15:30', finishText: 'Far away 51.5300,-2.7000' });
+    assert.ok(plan.spareSeconds < 0);
+    assert.equal(timeWarning(plan, [], plan.startTime - minutes(60)), null);
   });
 
   test('gives each kind of warning', () => {
@@ -297,5 +301,17 @@ describe('countdownText', () => {
   test('says when there is no deadline', () => {
     assert.equal(countdownText(null, at(12, 0)), 'No deadline set');
     assert.equal(countdownText(NaN, at(12, 0)), 'No deadline set');
+  });
+});
+
+describe('plural', () => {
+  test('uses the singular for one and adds s otherwise', () => {
+    assert.equal(plural(1, 'minute'), '1 minute');
+    assert.equal(plural(0, 'minute'), '0 minutes');
+    assert.equal(plural(3, 'minute'), '3 minutes');
+  });
+
+  test('uses a given plural', () => {
+    assert.equal(plural(2, 'line has a problem', 'lines have problems'), '2 lines have problems');
   });
 });

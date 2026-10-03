@@ -174,6 +174,20 @@ export function mapRoute(plan, doneKeys, formatTime) {
  */
 
 /**
+ * Writes a count with a word in the singular or plural.
+ *
+ * @param {number} count The count.
+ * @param {string} one The word for one, like `minute`.
+ * @param {string} [many] The word for any other count. Defaults to `one` with an `s`.
+ * @returns {string} The count and word, like `1 minute` or `3 minutes`.
+ * @example
+ * plural(2, 'line has a problem', 'lines have problems'); // '2 lines have problems'
+ */
+export function plural(count, one, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
  * Whether a plan was made for today. The plan's times are on the day it was
  * made, so a plan from an earlier day needs planning again.
  *
@@ -216,8 +230,9 @@ export function timeWarning(plan, doneKeys, now) {
   const minutesBehind = Math.floor(behindMs / 60000);
 
   // A plan can already end inside the safety margin, such as when even the
-  // walk to the finish doesn't fit, which counts as short of time.
-  const isShortOfTime = leftMs <= marginMs || plan.endEta > plan.deadline - marginMs;
+  // walk to the finish doesn't fit. That counts as short of time once the
+  // route has started, but not before, such as when planning ahead.
+  const isShortOfTime = leftMs <= marginMs || (plan.spareSeconds < 0 && now >= plan.startTime);
   const isRunningLate = minutesBehind >= 1 && plan.endEta + behindMs > plan.deadline - marginMs;
   // With every location ticked off and no finish to reach, there's nothing
   // to hurry for. An empty route isn't enough, because it can also mean
@@ -227,7 +242,6 @@ export function timeWarning(plan, doneKeys, now) {
     return null;
   }
 
-  const plural = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
   if (leftMs <= 0) {
     const message = plan.finish ? 'The deadline has passed. Head to the finish now.' : "The deadline has passed. Time's up.";
     return { kind: 'passed', message, minutesLeft, minutesBehind };
