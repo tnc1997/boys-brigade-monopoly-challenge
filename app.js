@@ -470,8 +470,8 @@ async function planRoute(from) {
 
 /** Messages for each way getting the position can fail, by `GeolocationPositionError.code`. */
 const GEOLOCATION_ERRORS = {
-  1: 'Location access is blocked. Allow location for this site in your browser settings, or update the Start field and press Plan route.',
-  2: "Your location isn't available right now. Try again in a moment, or update the Start field and press Plan route.",
+  1: 'Location access is blocked. Allow location for this site in your browser settings, or set Start to where you are, clear Start time and press Plan route.',
+  2: "Your location isn't available right now. Try again in a moment, or set Start to where you are, clear Start time and press Plan route.",
   3: 'Getting your location took too long. Try again, ideally with a clear view of the sky.',
 };
 
@@ -493,8 +493,22 @@ function showReplanStatus(message, isError) {
  * @param {import('./planner.js').LatLng} position The team's position.
  */
 async function replanFrom(position) {
-  const error = await planRoute(position);
-  showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
+  await replanAndReport(position, () => `Re-planned from your position at ${timeFormat.format(Date.now())}.`);
+}
+
+/**
+ * Re-plans and shows how it went under Re-plan from here, next to the route.
+ *
+ * @param {import('./planner.js').LatLng | null} position The team's position, or `null` to plan from the Start field.
+ * @param {() => string} successMessage Makes the message to show when a plan is made.
+ */
+async function replanAndReport(position, successMessage) {
+  try {
+    const error = await planRoute(position);
+    showReplanStatus(error ?? successMessage(), error !== null);
+  } catch {
+    showReplanStatus("Re-planning didn't work. Try again.", true);
+  }
 }
 
 /** Re-plans from the team's current position and the current time, as Re-plan from here does. */
@@ -704,12 +718,17 @@ speedSlider.addEventListener('input', () => {
 });
 
 settingsButton.addEventListener('click', () => {
-  isSpeedChanged = false;
+  // A speed saved outside the slider's range (by an older version) can't be
+  // planned with, so treat the slider's in-range value as a change to save.
+  const { speedKmh } = state.settings;
+  isSpeedChanged = Number.isFinite(speedKmh) && (speedKmh < SPEED_RANGE.min || speedKmh > SPEED_RANGE.max);
   // Escape and the back button close the panel without changing
   // returnValue, so clear it to stop an earlier Save applying again.
   settingsDialog.returnValue = '';
-  // The setup form's speed field can be empty, which saves NaN.
-  showSettingsSpeed(Number.isFinite(state.settings.speedKmh) ? state.settings.speedKmh : defaultState().settings.speedKmh);
+  // The setup form's speed field can be empty, which saves NaN, and an old
+  // speed can be out of range, so show the speed that Save would store.
+  const shownSpeed = Number.isFinite(speedKmh) ? speedKmh : defaultState().settings.speedKmh;
+  showSettingsSpeed(Math.min(SPEED_RANGE.max, Math.max(SPEED_RANGE.min, shownSpeed)));
   for (const field of panelFields) {
     if (field.dataset.panelSetup) {
       field.value = state.setup[field.dataset.panelSetup];
@@ -751,14 +770,11 @@ settingsDialog.addEventListener('close', () => {
   // Re-plan with the new settings, keeping ticks: from the Start field if
   // the team hasn't set off yet, otherwise from their position and now.
   if (state.plan?.settings) {
-    if (replanStartingPoint(state.plan, Date.now()) === 'position') {
+    const startingPoint = replanStartingPoint({ startTimeText: state.setup.startTimeText, doneKeys: state.doneKeys, now: Date.now() });
+    if (startingPoint === 'position') {
       requestReplan();
     } else {
-      // Show any problem under Re-plan from here, next to the route, as
-      // requestReplan does, rather than only in the setup form.
-      planRoute(null)
-        .then((error) => showReplanStatus(error ?? 'Re-planned with the new settings.', error !== null))
-        .catch(() => showReplanStatus("Re-planning didn't work. Try again.", true));
+      replanAndReport(null, () => 'Re-planned from the Start field with the new settings.');
     }
   }
 });

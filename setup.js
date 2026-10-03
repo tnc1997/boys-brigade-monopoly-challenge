@@ -184,18 +184,26 @@ export function searchesNeeded({ setup, searchResults = {}, isFromPosition = fal
 }
 
 /**
- * Decides where to re-plan from after the settings change. Before the
- * current plan's start time the team hasn't set off, so the route still
- * starts at the Start field and start time. After it, the team is on the
- * move, so the route starts from their position and the current time.
+ * Decides where to re-plan from after the settings change, from what's
+ * known now rather than from the old plan, which may be from another day.
+ * Once a selfie has been ticked off, the team has set off, so the route
+ * starts from their position and the current time. Otherwise, if the Start
+ * time field is still later today, they haven't set off, so the route starts
+ * at the Start field and start time. Otherwise it starts from their position.
  *
- * @param {SavedPlan} plan The current plan.
- * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @param {object} options What's known now.
+ * @param {string} options.startTimeText The Start time field, as `HH:MM`, or an empty string to start now.
+ * @param {string[]} options.doneKeys Keys of the locations whose selfie has been taken.
+ * @param {number} options.now The current time, in milliseconds since the Unix epoch.
  * @returns {'start' | 'position'} Where to re-plan from.
  * @example
- * replanStartingPoint(plan, plan.startTime - 60000); // 'start'
- * replanStartingPoint(plan, plan.startTime + 60000); // 'position'
+ * replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: Date.parse('2026-10-03T09:00:00') }); // 'start'
+ * replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: Date.parse('2026-10-03T14:00:00') }); // 'position'
  */
-export function replanStartingPoint(plan, now) {
-  return now < plan.startTime ? 'start' : 'position';
+export function replanStartingPoint({ startTimeText, doneKeys, now }) {
+  if (doneKeys.length > 0) {
+    return 'position';
+  }
+  const startTime = startTimeText.trim() === '' ? null : timeToday(startTimeText, now);
+  return startTime !== null && now < startTime ? 'start' : 'position';
 }
