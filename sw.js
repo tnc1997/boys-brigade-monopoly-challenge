@@ -57,7 +57,18 @@ const APP_FILE_URLS = new Set(APP_FILES.map((file) => new URL(file, self.locatio
  * @returns {Promise<Response | undefined>} The saved copy, if there is one.
  */
 async function matchSaved(key) {
-  return (await caches.open(CACHE_NAME)).match(key);
+  // Matching by cacheName doesn't create the cache, unlike caches.open.
+  return caches.match(key, { cacheName: CACHE_NAME });
+}
+
+/**
+ * Lists this app's caches. Other sites on tnc1997.github.io share the same
+ * storage, so only caches with this app's prefix are ever read or deleted.
+ *
+ * @returns {Promise<string[]>} The names of this app's caches.
+ */
+async function appCacheNames() {
+  return (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX));
 }
 
 /**
@@ -75,8 +86,8 @@ async function saveResponse(key, response) {
 
 /**
  * Makes sure a library file is saved in the current cache. It reuses a
- * copy from any cache, including the one from before a deploy, and only
- * downloads it if there isn't one. A failure doesn't throw, so the app's own
+ * copy from this app's other caches, such as the one from before a deploy,
+ * and only downloads it if there isn't one. A failure doesn't throw, so the app's own
  * files can still be saved; it's tried again later.
  *
  * @param {string} url The library file's URL.
@@ -84,13 +95,11 @@ async function saveResponse(key, response) {
  */
 async function saveLibraryFile(url) {
   try {
-    const cache = await caches.open(CACHE_NAME);
-    if (await cache.match(url)) {
+    if (await matchSaved(url)) {
       return;
     }
-    // Only this app's caches are searched, since other sites share the storage.
-    const names = (await caches.keys()).filter((name) => name.startsWith(CACHE_PREFIX));
-    const copies = await Promise.all(names.map(async (name) => (await caches.open(name)).match(url)));
+    const others = (await appCacheNames()).filter((name) => name !== CACHE_NAME);
+    const copies = await Promise.all(others.map((cacheName) => caches.match(url, { cacheName })));
     const existing = copies.find((copy) => copy?.ok);
     // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
     await saveResponse(url, existing ?? (await fetch(url, { mode: 'cors' })));
@@ -117,8 +126,8 @@ self.addEventListener('activate', (event) => {
       // Try any library file that couldn't be saved at install, before the
       // old caches (which may still have a copy) are deleted.
       await Promise.all(LIBRARY_FILES.map(saveLibraryFile));
-      const names = await caches.keys();
-      await Promise.all(names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME).map((name) => caches.delete(name)));
+      const names = await appCacheNames();
+      await Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)));
       await self.clients.claim();
     })(),
   );
@@ -163,10 +172,15 @@ self.addEventListener('fetch', (event) => {
   event.waitUntil(network.then(() => saveResponse(key, copy)).catch(() => {}));
   // Without a saved copy, opening the page falls back to the saved page;
   // anything else fails as it would without the service worker. The lookup
-  // runs at most once per request.
+  // runs at most once per request, unless it fails, when it's tried again.
   let savedLookup;
   const saved = () => {
-    savedLookup ??= matchSaved(key).then((match) => match ?? (request.mode === 'navigate' ? matchSaved(new URL('index.html', self.location.href).href) : undefined));
+    savedLookup ??= matchSaved(key)
+      .then((match) => match ?? (request.mode === 'navigate' ? matchSaved(new URL('index.html', self.location.href).href) : undefined))
+      .catch((error) => {
+        savedLookup = undefined;
+        throw error;
+      });
     return savedLookup;
   };
   // With a weak signal the network can hang, so use the saved copy after a
@@ -175,10 +189,12 @@ self.addEventListener('fetch', (event) => {
   const timeout = new Promise((resolve) => {
     timer = setTimeout(resolve, NETWORK_TIMEOUT_MS);
   }).then(saved);
-  // A server error (5xx, such as during a GitHub Pages problem) is treated
-  // like no signal, using the saved copy if there is one. Other responses,
-  // including redirects and deliberate 404s, are passed on as they are.
-  const usable = network.then(async (loaded) => (loaded.status >= 500 ? ((await saved()) ?? loaded) : loaded));
+  // An error response (4xx or 5xx) is treated like no signal, using the
+  // saved copy if there is one. During a GitHub Pages problem or a broken
+  // deploy, Pages can answer 404 for every file, and a busy server 429 or
+  // 408, so this keeps the app working on the day. Redirects (including the
+  // opaque redirects navigations get) are passed on as they are.
+  const usable = network.then(async (loaded) => (loaded.status >= 400 ? ((await saved()) ?? loaded) : loaded));
   network.finally(() => clearTimeout(timer)).catch(() => {});
   event.respondWith(
     Promise.race([usable, timeout.then((match) => match ?? usable)])
