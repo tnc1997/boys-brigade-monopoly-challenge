@@ -267,7 +267,10 @@ function stopItem(stop, isFinish) {
   if (!isFinish) {
     links.append(doneToggle(stop.location, isDone));
   }
-  links.append(externalLink(stop.directionsUrl, 'Directions', `Walking directions to ${stop.location.label} in Google Maps`));
+  links.append(
+    externalLink(stop.googleMapsDirectionsUrl, 'Google Maps', `Walking directions to ${stop.location.label} in Google Maps`),
+    externalLink(stop.appleMapsDirectionsUrl, 'Apple Maps', `Walking directions to ${stop.location.label} in Apple Maps`),
+  );
   details.append(title, timing, links);
   item.append(badge, details);
   return item;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { countdownText, describeRoute, directionsUrl, formatDuration, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from '../route.js';
+import { appleMapsDirectionsUrl, countdownText, describeRoute, formatDuration, googleMapsDirectionsUrl, isPlanForToday, mapRoute, plural, progress, timeWarning, toggleDone } from '../route.js';
 import { planFromSetup } from '../setup.js';
 import { defaultState } from '../storage.js';
 
@@ -16,13 +16,19 @@ const savedPlan = (setup = {}, settings = {}) => {
   }).plan;
 };
 
-describe('directionsUrl', () => {
-  test('links to walking directions to the location', () => {
-    const url = new URL(directionsUrl({ lat: 51.4545, lng: -2.5879 }));
+describe('googleMapsDirectionsUrl', () => {
+  test('opens walking directions to the location', () => {
+    const url = new URL(googleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }));
     assert.equal(url.origin + url.pathname, 'https://www.google.com/maps/dir/');
     assert.equal(url.searchParams.get('api'), '1');
     assert.equal(url.searchParams.get('destination'), '51.4545,-2.5879');
     assert.equal(url.searchParams.get('travelmode'), 'walking');
+  });
+});
+
+describe('appleMapsDirectionsUrl', () => {
+  test('opens walking directions from the current position to the location', () => {
+    assert.equal(appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }), 'https://maps.apple.com/?daddr=51.4545,-2.5879&dirflg=w');
   });
 });
 
@@ -43,7 +49,7 @@ describe('formatDuration', () => {
 });
 
 describe('describeRoute', () => {
-  test('describes each stop in order with its arrival time, walk time and links', () => {
+  test('describes each stop in order with its arrival time, walk time and directions URLs', () => {
     const plan = savedPlan();
     const { stops } = describeRoute(plan);
     assert.deepEqual(stops.map(({ number }) => number), [1, 2]);
@@ -51,7 +57,8 @@ describe('describeRoute', () => {
     assert.deepEqual(stops.map(({ arrivalTime }) => arrivalTime), plan.arrivalTimes);
     for (const stop of stops) {
       assert.ok(stop.walkSeconds > 0);
-      assert.equal(stop.directionsUrl, directionsUrl(stop.location));
+      assert.equal(stop.googleMapsDirectionsUrl, googleMapsDirectionsUrl(stop.location));
+      assert.equal(stop.appleMapsDirectionsUrl, appleMapsDirectionsUrl(stop.location));
     }
   });
 
@@ -78,6 +85,8 @@ describe('describeRoute', () => {
     assert.equal(finish.location.label, 'Finish');
     assert.equal(finish.arrivalTime, endEta);
     assert.ok(finish.walkSeconds > 0);
+    assert.equal(finish.googleMapsDirectionsUrl, googleMapsDirectionsUrl(finish.location));
+    assert.equal(finish.appleMapsDirectionsUrl, appleMapsDirectionsUrl(finish.location));
   });
 
   test('lists the skipped locations in list order', () => {
