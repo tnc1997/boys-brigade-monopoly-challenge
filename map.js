@@ -38,6 +38,13 @@ export const BRISTOL_BOUNDS = [
  * @property {string} title A description for its tooltip and screen readers, like "1. Old Kent Road, ETA 11:02".
  */
 
+/**
+ * How long after the map is pressed a context menu still counts as a long
+ * press or right-click, in milliseconds. Long presses fire it after about
+ * half a second.
+ */
+const PRESS_MAX_AGE_MS = 2000;
+
 /** How each kind of marker looks, as Tailwind classes. */
 const MARKER_CLASSES = {
   start: 'bg-ink text-surface',
@@ -73,12 +80,16 @@ export function createMap(container, { onTilesFailed = () => {}, onTilesLoaded =
   // Leaflet fires contextmenu for a right-click, a long press on Android and,
   // with its tapHold option (on by default in mobile Safari), a long press on
   // iOS. It isn't fired for presses on markers, popups or the zoom buttons.
-  map.on('contextmenu', ({ latlng, originalEvent }) => {
-    // The keyboard's context menu key (or Shift+F10) also fires contextmenu,
-    // at a point the team didn't choose. Browsers that report it as a pointer
-    // event give it an empty pointerType, so it's ignored. Leaflet's own
-    // tapHold events aren't pointer events, so they still count.
-    if (originalEvent?.pointerType === '') {
+  // The keyboard's context menu key (or Shift+F10) also fires contextmenu,
+  // at a point the team didn't choose. Not every browser says where it came
+  // from, so only count it if the map was pressed just before, as it is for
+  // a right-click or a long press.
+  let lastPressTime = -Infinity;
+  container.addEventListener('pointerdown', () => {
+    lastPressTime = Date.now();
+  }, { capture: true });
+  map.on('contextmenu', ({ latlng }) => {
+    if (Date.now() - lastPressTime > PRESS_MAX_AGE_MS) {
       return;
     }
     const { lat, lng } = latlng.wrap();
