@@ -66,3 +66,14 @@ describe('service worker saving', () => {
     assert.match(sw, /new Request\(file, \{ cache: 'reload' \}\)/);
   });
 });
+
+describe('service worker caches', () => {
+  test("only deletes this app's own old caches, since other sites share the storage", () => {
+    assert.match(sw, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);
+    assert.match(sw, /const CACHE_NAME = `\$\{CACHE_PREFIX\}v\d+`;/);
+  });
+
+  test('uses the saved copy when the server returns an error', () => {
+    assert.match(sw, /loaded\.ok \? loaded : \(\(await saved\(\)\) \?\? loaded\)/);
+  });
+});
