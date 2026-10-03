@@ -73,8 +73,8 @@ let routeMap = null;
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
 
-/** The locations not in the route yet when the map was last drawn, from {@link newLocationKeys}, or `null` before it's drawn. */
-let drawnNewLocationKeys = null;
+/** The locations not in the route yet when the map was last drawn, from {@link newLocationsText}, or `null` before it's drawn. */
+let drawnNewLocations = null;
 
 /**
  * Whether the walking speed has been changed in the settings panel since it
@@ -202,24 +202,25 @@ function showLines(lines) {
 function previewLines() {
   const lines = parseLocations(state.setup.locationsText, { searchResults: state.searchResults });
   showLines(lines);
-  // Only redraw the map when the locations not in the route yet change, so
-  // typing doesn't keep rebuilding it or closing an open popup.
-  if (newLocationKeys(lines) !== drawnNewLocationKeys) {
+  // Only redraw the map when the locations not in the route yet change, or
+  // are renamed, so typing doesn't keep rebuilding it or closing an open
+  // popup.
+  if (newLocationsText(lines) !== drawnNewLocations) {
     updateMap(lines);
   }
 }
 
 /**
- * Lists the keys of the locations not in the route yet, to tell whether the
- * map needs redrawing.
+ * Lists the locations not in the route yet, with their names, to tell
+ * whether the map needs redrawing.
  *
  * @param {import('./locations.js').ParsedLocationLine[]} lines The lines of the location list.
- * @returns {string} The keys, joined into one string.
+ * @returns {string} Each location's key and marker title, one per line.
  */
-function newLocationKeys(lines) {
+function newLocationsText(lines) {
   return newLocationMarkers(lines, state.plan?.settings ? state.plan : null)
-    .map(({ location }) => location.key)
-    .join(' ');
+    .map(({ location, title }) => `${location.key} ${title}`)
+    .join('\n');
 }
 
 /**
@@ -713,7 +714,7 @@ function updateMap(lines = parseLocations(state.setup.locationsText, { searchRes
   const plan = state.plan?.settings ? state.plan : null;
   const route = plan ? mapRoute(plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
   route.markers.push(...newLocationMarkers(lines, plan));
-  drawnNewLocationKeys = newLocationKeys(lines);
+  drawnNewLocations = newLocationsText(lines);
   showRoute(routeMap, route, shouldFitMap);
   shouldFitMap = false;
 }
