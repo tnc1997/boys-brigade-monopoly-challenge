@@ -1,6 +1,6 @@
 import { countdownText, describeRoute, formatDuration, isPlanForToday, mapRoute, newLocationMarkers, plural, progress, timeWarning, toggleDone } from './route.js';
 import { searchPlaces } from './search.js';
-import { addLocationLine, parseLocations, pinLine, removeLocationLines } from './locations.js';
+import { addLocationLine, parseLocations, pinLine } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
 import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from './setup.js';
@@ -761,22 +761,6 @@ pinDialog.addEventListener('close', () => {
   saveLocationsText(addLocationLine(state.setup.locationsText, result.line));
   const action = state.plan?.settings ? 'Re-plan from here' : 'Plan route';
   showPinStatus(`Added ${result.location.label} to the location list. Press ${action} to include it in the route.`);
-});
-
-// Locations that aren't in the route yet have a Remove button in their popup.
-mapContainer.addEventListener('click', (event) => {
-  const remove = event.target instanceof Element ? event.target.closest('[data-remove-key]') : null;
-  if (!(remove instanceof HTMLButtonElement)) {
-    return;
-  }
-  const { removeKey } = remove.dataset;
-  const { searchResults } = state;
-  const removed = parseLocations(state.setup.locationsText, { searchResults }).find(({ result }) => result.isValid && result.location.key === removeKey);
-  const label = removed?.result.isValid ? removed.result.location.label : 'the location';
-  saveLocationsText(removeLocationLines(state.setup.locationsText, removeKey, { searchResults }));
-  showPinStatus(`Removed ${label} from the location list.`);
-  // Redrawing the map closed the popup, so keep focus on the map.
-  mapContainer.focus();
 });
 
 for (const tab of tabs) {

@@ -36,7 +36,6 @@ export const BRISTOL_BOUNDS = [
  * @property {import('./planner.js').LatLng} location Where it is.
  * @property {string} label What the marker shows: the stop's number, or a short symbol.
  * @property {string} title A description for its tooltip and screen readers, like "1. Old Kent Road, ETA 11:02".
- * @property {string} [removeKey] The location's key, for a marker whose popup has a Remove button to take it out of the location list.
  */
 
 /** How each kind of marker looks, as Tailwind classes. */
@@ -110,7 +109,7 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
   }
   // Skipped locations go underneath, so they don't hide the route.
   const ordered = [...markers.filter(({ kind }) => kind === 'skipped'), ...markers.filter(({ kind }) => kind !== 'skipped')];
-  for (const { kind, location, label, title, removeKey } of ordered) {
+  for (const { kind, location, label, title } of ordered) {
     // Each marker can be tapped anywhere in a 44 px square, larger than the
     // circle that's drawn, so it's easy to hit without crowding the map.
     const target = document.createElement('span');
@@ -125,24 +124,12 @@ export function showRoute({ map, routeLayer }, { path, markers }, shouldFit) {
       alt: title,
       keyboard: true,
       // New locations go on top, so a pin just dropped near a stop can
-      // still be tapped to remove it.
+      // still be seen and tapped.
       zIndexOffset: { skipped: -1000, new: 1000 }[kind] ?? 0,
     });
-    const popup = document.createElement('div');
-    popup.className = 'flex flex-col items-start gap-2';
-    const description = document.createElement('p');
-    description.className = '!m-0 text-sm';
-    description.textContent = title;
-    popup.append(description);
-    if (removeKey) {
-      // The app handles the click, as the button's popup is inside the map.
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'min-h-11 rounded-md px-3 text-sm font-semibold text-danger ring-1 ring-danger-line hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger';
-      remove.textContent = 'Remove';
-      remove.dataset.removeKey = removeKey;
-      popup.append(remove);
-    }
+    const popup = document.createElement('p');
+    popup.className = '!m-0 text-sm';
+    popup.textContent = title;
     marker.bindPopup(popup).addTo(routeLayer);
   }
   // Fit the route itself, so far-off skipped locations (or new ones) don't

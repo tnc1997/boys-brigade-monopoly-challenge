@@ -182,7 +182,6 @@ describe('newLocationMarkers', () => {
         location: { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' },
         label: '+',
         title: 'Cabot Tower, not in the route yet',
-        removeKey: '51.451740,-2.603400',
       },
     ]);
   });

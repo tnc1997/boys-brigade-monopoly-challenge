@@ -166,15 +166,15 @@ export function mapRoute(plan, doneKeys, formatTime) {
 /**
  * Makes markers for the locations in the location list that aren't in the
  * plan yet, such as a pin just dropped on the map, so the team can see them
- * and remove any added by mistake. Each location is marked once, however
- * many lines it's on.
+ * before planning again. Each location is marked once, however many lines
+ * it's on. To remove one, delete its line from the location list.
  *
  * @param {import('./locations.js').ParsedLocationLine[]} lines The lines of the location list.
  * @param {import('./setup.js').SavedPlan | null} plan The plan, or `null` if there isn't one.
- * @returns {import('./map.js').MapMarker[]} A removable marker for each location that isn't in the plan.
+ * @returns {import('./map.js').MapMarker[]} A marker for each location that isn't in the plan.
  * @example
  * newLocationMarkers(parseLocations('Cabot Tower 51.451740,-2.603400'), null);
- * // [{ kind: 'new', location: { lat: 51.45174, … }, label: '+', title: 'Cabot Tower, not in the route yet', removeKey: '51.451740,-2.603400' }]
+ * // [{ kind: 'new', location: { lat: 51.45174, … }, label: '+', title: 'Cabot Tower, not in the route yet' }]
  */
 export function newLocationMarkers(lines, plan) {
   const keys = new Set(plan?.points.map(({ key }) => key));
@@ -184,7 +184,7 @@ export function newLocationMarkers(lines, plan) {
     if (result.isValid && !keys.has(result.location.key)) {
       const { location } = result;
       keys.add(location.key);
-      markers.push({ kind: 'new', location, label: '+', title: `${location.label}, not in the route yet`, removeKey: location.key });
+      markers.push({ kind: 'new', location, label: '+', title: `${location.label}, not in the route yet` });
     }
   }
   return markers;
