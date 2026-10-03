@@ -222,6 +222,18 @@ describe('timeWarning', () => {
     assert.match(timeWarning(withFinish, allDoneWithFinish, withFinish.deadline - minutes(5)).message, /^Head to the finish now/);
   });
 
+  test('warns when nothing fits before the deadline, as when it is only a few minutes away', () => {
+    // Re-planning with the deadline 5 minutes away leaves less than the
+    // 15-minute safety margin, so every location is skipped.
+    for (const finishText of ['', 'Finish 51.4556,-2.5894']) {
+      const plan = savedPlan({ finishText }, { deadline: '11:05' });
+      assert.deepEqual(plan.order, []);
+      const warning = timeWarning(plan, [], plan.startTime);
+      assert.ok(warning, `no warning ${finishText ? 'with' : 'without'} a finish`);
+      assert.equal(warning.minutesLeft, 5);
+    }
+  });
+
   test('says when the deadline has passed', () => {
     assert.equal(timeWarning(savedPlan(), [], savedPlan().deadline + minutes(5)).message, "The deadline has passed. Time's up.");
     const withFinish = savedPlan({ finishText: 'Finish 51.4556,-2.5894' });
