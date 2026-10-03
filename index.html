@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Plan a walking route that visits as many Monopoly Challenge locations as possible before the deadline.">
-    <title>Monopoly Challenge Planner</title>
+    <meta name="description" content="An unofficial route planner for the Boys' Brigade Monopoly Challenge: plan a walking route that visits as many locations as possible before the deadline.">
+    <title>Boys' Brigade Monopoly Challenge Route Planner</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
       integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==" crossorigin="anonymous" referrerpolicy="strict-origin-when-cross-origin">
     <link rel="stylesheet" href="styles.css">
@@ -16,12 +16,12 @@
     <header class="bg-accent text-white">
       <div class="mx-auto flex max-w-xl items-center justify-between gap-3 px-4 py-3">
         <div>
-          <h1 class="text-lg font-semibold">Monopoly Challenge Planner</h1>
+          <h1 class="text-base font-semibold xs:text-lg">Monopoly Challenge Route Planner</h1>
           <p class="text-sm text-white">Boys' Brigade · Bristol</p>
         </div>
         <p class="shrink-0 text-right">
           <span id="offline-badge" class="mb-1 hidden rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold" role="status">Offline</span>
-          <span id="countdown" class="block text-base font-semibold tabular-nums"></span>
+          <span id="countdown" class="block text-sm font-semibold tabular-nums xs:text-base"></span>
           <span id="countdown-deadline" class="block text-xs text-white"></span>
         </p>
       </div>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { SCHEMA_VERSION, STORAGE_KEY, clearState, defaultState, loadState, resetChallenge, saveState } from '../storage.js';
+import { LEGACY_STORAGE_KEYS, SCHEMA_VERSION, STORAGE_KEY, clearState, defaultState, loadState, resetChallenge, saveState } from '../storage.js';
 
 /** An in-memory stand-in for localStorage. */
 const memoryStorage = (initial = {}) => {
@@ -133,5 +133,45 @@ describe('resetChallenge', () => {
     state.setup.locationsText = 'Old Kent Road 51.4545,-2.5879';
     resetChallenge(state);
     assert.equal(state.setup.locationsText, 'Old Kent Road 51.4545,-2.5879');
+  });
+});
+
+describe('legacy storage keys', () => {
+  const [legacyKey] = LEGACY_STORAGE_KEYS;
+
+  test('uses the new name for the storage key', () => {
+    assert.equal(STORAGE_KEY, 'monopoly-challenge-route-planner');
+    assert.deepEqual(LEGACY_STORAGE_KEYS, ['monopoly-challenge-planner']);
+  });
+
+  test('moves state saved under the old key to the new key', () => {
+    const saved = { ...defaultState(), doneKeys: ['51.449200,-2.581300'] };
+    const storage = memoryStorage({ [legacyKey]: JSON.stringify(saved) });
+    assert.deepEqual(loadState(storage).doneKeys, ['51.449200,-2.581300']);
+    assert.equal(storage.items.has(legacyKey), false);
+    assert.deepEqual(JSON.parse(storage.items.get(STORAGE_KEY)).doneKeys, ['51.449200,-2.581300']);
+  });
+
+  test('uses the old state and keeps the old key when saving under the new key fails', () => {
+    const storage = memoryStorage({ [legacyKey]: JSON.stringify({ ...defaultState(), doneKeys: ['old'] }) });
+    storage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    assert.deepEqual(loadState(storage).doneKeys, ['old']);
+    assert.equal(storage.items.has(legacyKey), true);
+  });
+
+  test('prefers state saved under the new key', () => {
+    const storage = memoryStorage({
+      [STORAGE_KEY]: JSON.stringify({ ...defaultState(), doneKeys: ['new'] }),
+      [legacyKey]: JSON.stringify({ ...defaultState(), doneKeys: ['old'] }),
+    });
+    assert.deepEqual(loadState(storage).doneKeys, ['new']);
+  });
+
+  test('clears state saved under both keys', () => {
+    const storage = memoryStorage({ [STORAGE_KEY]: '{}', [legacyKey]: '{}' });
+    assert.equal(clearState(storage), true);
+    assert.equal(storage.items.size, 0);
   });
 });
