@@ -70,6 +70,23 @@ const SEPARATORS = /^[\s,;|–—-]+|[\s,;|–—-]+$/g;
  */
 
 /**
+ * Makes the key a location is remembered by, from its coordinates to 6
+ * decimal places, so the same place written differently gets the same key.
+ *
+ * @param {number} lat Latitude.
+ * @param {number} lng Longitude.
+ * @returns {string} The key, like `51.451740,-2.603400`.
+ * @example
+ * locationKey(51.45174, -2.6034); // '51.451740,-2.603400'
+ */
+export function locationKey(lat, lng) {
+  // Round first, so a value like -0.0000001 gives 0.000000 rather than
+  // -0.000000, the same as -0 read back from the location list.
+  const format = (value) => Number(value.toFixed(6)).toFixed(6);
+  return `${format(lat)},${format(lng)}`;
+}
+
+/**
  * Gets the coordinates from a Google Maps URL, without any network
  * requests. The pin's position (`!3d…!4d…`) is preferred over the centre of
  * the map (`@lat,lng`), because the map can be scrolled away from the pin.
@@ -148,7 +165,7 @@ function searchedLocation(text, searchResults) {
       lat: result.lat,
       lng: result.lng,
       label: label || query,
-      key: `${result.lat.toFixed(6)},${result.lng.toFixed(6)}`,
+      key: locationKey(result.lat, result.lng),
       matchedName: result.name,
     },
   };
@@ -235,7 +252,7 @@ export function parseLocation(line, { searchResults = {} } = {}) {
       lat,
       lng,
       label: label || placeName || `${coordinates[0].lat}, ${coordinates[0].lng}`,
-      key: `${lat.toFixed(6)},${lng.toFixed(6)}`,
+      key: locationKey(lat, lng),
     },
   };
 }
@@ -254,4 +271,50 @@ export function parseLocations(text, { searchResults = {} } = {}) {
     .map((line, index) => ({ lineNumber: index + 1, text: line }))
     .filter(({ text: line }) => line.trim() !== '')
     .map((line) => ({ ...line, result: parseLocation(line.text, { searchResults }) }));
+}
+
+/**
+ * Makes a line of the location list for a pin dropped on the map, with its
+ * coordinates to 6 decimal places (about 10 cm). The label is checked, so a
+ * label that looks like coordinates, a Google Maps link or a what3words
+ * address can't stop the line being read.
+ *
+ * @param {string} label What to call the location, as typed.
+ * @param {import('./planner.js').LatLng} latLng Where the pin was dropped.
+ * @returns {{ isValid: true, line: string, location: Location } | { isValid: false, error: string }} The line and the location it gives, or a message saying what's wrong with the label.
+ * @example
+ * pinLine('Cabot Tower', { lat: 51.45174, lng: -2.6034 });
+ * // { isValid: true, line: 'Cabot Tower 51.451740,-2.603400', location: { lat: 51.45174, lng: -2.6034, label: 'Cabot Tower', key: '51.451740,-2.603400' } }
+ */
+export function pinLine(label, { lat, lng }) {
+  // Separators around the name are dropped when the line is read, so drop
+  // them here too, and treat a name of only separators, like "-", as blank.
+  const name = label.replace(/\s+/g, ' ').replace(SEPARATORS, '');
+  if (!name) {
+    return { isValid: false, error: 'Enter a name for the location.' };
+  }
+  const key = locationKey(lat, lng);
+  // The key is the coordinates to 6 decimal places, which is also how
+  // they're written on the line.
+  const line = `${name} ${key}`;
+  const result = parseLocation(line);
+  // The line must read back as the pin, not as other coordinates in the label.
+  if (!result.isValid || result.location.key !== key) {
+    return { isValid: false, error: 'Use a name without coordinates, links or what3words addresses.' };
+  }
+  return { isValid: true, line, location: result.location };
+}
+
+/**
+ * Adds a line to the end of the location list.
+ *
+ * @param {string} text The location list as typed.
+ * @param {string} line The line to add.
+ * @returns {string} The location list with the line on the end.
+ * @example
+ * addLocationLine('Old Kent Road 51.4545,-2.5879', 'Cabot Tower 51.451740,-2.603400');
+ * // 'Old Kent Road 51.4545,-2.5879\nCabot Tower 51.451740,-2.603400'
+ */
+export function addLocationLine(text, line) {
+  return text === '' || text.endsWith('\n') ? `${text}${line}` : `${text}\n${line}`;
 }

@@ -1,4 +1,4 @@
-import { parseLocation, parseLocations } from './locations.js';
+import { locationKey, parseLocation, parseLocations } from './locations.js';
 import { plan } from './planner.js';
 import { SPEED_RANGE } from './settings.js';
 
@@ -82,7 +82,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   // The Start and Finish fields are parsed first, so what they matched can be
   // shown even when planning stops because of the location list.
   const start = from
-    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: `${from.lat.toFixed(6)},${from.lng.toFixed(6)}` } }
+    ? { isValid: true, location: { lat: from.lat, lng: from.lng, label: 'Your position', key: locationKey(from.lat, from.lng) } }
     : parseLocation(setup.startText, { searchResults });
   const finish = setup.finishText.trim() === '' ? null : parseLocation(setup.finishText, { searchResults });
   /** @type {SearchMatch[]} */
