@@ -427,10 +427,14 @@ async function lookUpAddresses(isFromPosition) {
     return state.searchResults;
   }
   showSearchStatus(`Looking up ${queries.length === 1 ? '1 address' : `${queries.length} addresses`}…`);
-  const results = await searchPlaces(queries, {
-    onProgress: (done, total) => showSearchStatus(`Looked up ${done} of ${total}…`),
-  });
-  showSearchStatus(null);
+  let results;
+  try {
+    results = await searchPlaces(queries, {
+      onProgress: (done, total) => showSearchStatus(`Looked up ${done} of ${total}…`),
+    });
+  } finally {
+    showSearchStatus(null);
+  }
   const saved = Object.fromEntries(Object.entries(results).filter(([, result]) => result.isFound || !result.isTemporary));
   state.searchResults = { ...state.searchResults, ...saved };
   saveState(state);
@@ -492,9 +496,8 @@ function showReplanStatus(message, isError) {
  *
  * @param {import('./planner.js').LatLng} position The team's position.
  */
-async function replanFrom(position) {
-  await replanAndReport(position, () => `Re-planned from your position at ${timeFormat.format(Date.now())}.`);
-}
+/** The message after re-planning from the team's position. */
+const replannedFromPosition = () => `Re-planned from your position at ${timeFormat.format(Date.now())}.`;
 
 /**
  * Re-plans and shows how it went under Re-plan from here, next to the route.
@@ -515,17 +518,17 @@ async function replanAndReport(position, successMessage) {
 function requestReplan() {
   // Use the watched position if it's recent, rather than waiting for a new one.
   if (latestPosition && Date.now() - latestPosition.time <= POSITION_MAX_AGE_MS) {
-    replanFrom({ lat: latestPosition.lat, lng: latestPosition.lng });
+    replanAndReport({ lat: latestPosition.lat, lng: latestPosition.lng }, replannedFromPosition);
     return;
   }
   if (!('geolocation' in navigator)) {
-    showReplanStatus("This browser can't share your location. Update the Start field and press Plan route instead.", true);
+    showReplanStatus("This browser can't share your location. Set Start to where you are, clear Start time and press Plan route instead.", true);
     return;
   }
   replanButton.disabled = true;
   showReplanStatus('Getting your location…', false);
   navigator.geolocation.getCurrentPosition(
-    (position) => replanFrom({ lat: position.coords.latitude, lng: position.coords.longitude }),
+    (position) => replanAndReport({ lat: position.coords.latitude, lng: position.coords.longitude }, replannedFromPosition),
     (error) => {
       replanButton.disabled = false;
       showReplanStatus(GEOLOCATION_ERRORS[error.code] ?? "Your location couldn't be found. Try again.", true);
@@ -720,8 +723,9 @@ speedSlider.addEventListener('input', () => {
 settingsButton.addEventListener('click', () => {
   // A speed saved outside the slider's range (by an older version) can't be
   // planned with, so treat the slider's in-range value as a change to save.
+  // An empty speed (NaN) is treated the same way, so Save stores the speed shown.
   const { speedKmh } = state.settings;
-  isSpeedChanged = Number.isFinite(speedKmh) && (speedKmh < SPEED_RANGE.min || speedKmh > SPEED_RANGE.max);
+  isSpeedChanged = !Number.isFinite(speedKmh) || speedKmh < SPEED_RANGE.min || speedKmh > SPEED_RANGE.max;
   // Escape and the back button close the panel without changing
   // returnValue, so clear it to stop an earlier Save applying again.
   settingsDialog.returnValue = '';
@@ -770,7 +774,16 @@ settingsDialog.addEventListener('close', () => {
   // Re-plan with the new settings, keeping ticks: from the Start field if
   // the team hasn't set off yet, otherwise from their position and now.
   if (state.plan?.settings) {
-    const startingPoint = replanStartingPoint({ startTimeText: state.setup.startTimeText, doneKeys: state.doneKeys, now: Date.now() });
+    const now = Date.now();
+    // A plan's times are on the day it was made, so only today's counts.
+    const isPlanForToday = new Date(state.plan.deadline).toDateString() === new Date(now).toDateString();
+    const startingPoint = replanStartingPoint({
+      startTimeText: state.setup.startTimeText,
+      deadline: state.settings.deadline,
+      doneKeys: state.doneKeys,
+      isReplannedFromPositionToday: Boolean(state.plan.isFromPosition) && isPlanForToday,
+      now,
+    });
     if (startingPoint === 'position') {
       requestReplan();
     } else {

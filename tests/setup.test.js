@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from '../setup.js';
+import { planFromSetup, replanStartingPoint, searchesNeeded, startTimeToday, timeToday } from '../setup.js';
 import { defaultState } from '../storage.js';
 
 const now = new Date(2026, 9, 3, 11, 0).getTime();
@@ -168,34 +168,52 @@ describe('searchesNeeded', () => {
   });
 });
 
+describe('startTimeToday', () => {
+  test('uses now for a blank start time, and today otherwise', () => {
+    assert.equal(startTimeToday('', now), now);
+    assert.equal(startTimeToday(' 11:30 ', now), new Date(2026, 9, 3, 11, 30).getTime());
+    assert.equal(startTimeToday('soon', now), null);
+  });
+});
+
 describe('replanStartingPoint', () => {
-  const at = (hours, minutes) => new Date(2026, 9, 3, hours, minutes).getTime();
+  const at = (day, hours, minutes) => new Date(2026, 9, day, hours, minutes).getTime();
+  const options = (overrides) => ({ startTimeText: '11:00', deadline: '16:00', doneKeys: [], isReplannedFromPositionToday: false, ...overrides });
 
   test('re-plans from the Start field before the start time, when nothing is ticked off', () => {
-    assert.equal(replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: at(10, 30) }), 'start');
+    assert.equal(replanStartingPoint(options({ now: at(3, 10, 30) })), 'start');
   });
 
-  test("re-plans from the team's position from the start time onwards", () => {
-    assert.equal(replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: at(11, 0) }), 'position');
-    assert.equal(replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: at(14, 0) }), 'position');
+  test("re-plans from the team's position between the start time and the deadline", () => {
+    assert.equal(replanStartingPoint(options({ now: at(3, 11, 0) })), 'position');
+    assert.equal(replanStartingPoint(options({ now: at(3, 14, 0) })), 'position');
+  });
+
+  test("re-plans from the Start field the evening before, after that day's deadline", () => {
+    assert.equal(replanStartingPoint(options({ now: at(2, 20, 0) })), 'start');
+  });
+
+  test('re-plans from the Start field the morning of the challenge', () => {
+    assert.equal(replanStartingPoint(options({ now: at(3, 9, 0) })), 'start');
   });
 
   test("re-plans from the team's position once a selfie is ticked off, even before the start time", () => {
-    assert.equal(replanStartingPoint({ startTimeText: '11:00', doneKeys: ['51.449200,-2.581300'], now: at(10, 50) }), 'position');
+    assert.equal(replanStartingPoint(options({ doneKeys: ['51.449200,-2.581300'], now: at(3, 10, 50) })), 'position');
   });
 
-  test("uses today's start time, so a plan from the evening before still starts at the Start field", () => {
-    // The Start time field holds a time of day, so it's compared with today
-    // whenever the plan was made.
-    assert.equal(replanStartingPoint({ startTimeText: '11:00', doneKeys: [], now: at(9, 0) }), 'start');
+  test("re-plans from the team's position after re-planning from there today, even before the start time", () => {
+    assert.equal(replanStartingPoint(options({ isReplannedFromPositionToday: true, now: at(3, 10, 45) })), 'position');
   });
 
   test('uses a start time that has just been put back', () => {
-    assert.equal(replanStartingPoint({ startTimeText: '12:00', doneKeys: [], now: at(11, 30) }), 'start');
+    assert.equal(replanStartingPoint(options({ startTimeText: '12:00', now: at(3, 11, 30) })), 'start');
   });
 
-  test("re-plans from the team's position when there's no start time", () => {
-    assert.equal(replanStartingPoint({ startTimeText: '', doneKeys: [], now: at(10, 0) }), 'position');
-    assert.equal(replanStartingPoint({ startTimeText: 'soon', doneKeys: [], now: at(10, 0) }), 'position');
+  test("re-plans from the team's position with no start time before the deadline", () => {
+    assert.equal(replanStartingPoint(options({ startTimeText: '', now: at(3, 10, 0) })), 'position');
+  });
+
+  test('re-plans from the Start field with an invalid start time', () => {
+    assert.equal(replanStartingPoint(options({ startTimeText: 'soon', now: at(3, 10, 0) })), 'start');
   });
 });
