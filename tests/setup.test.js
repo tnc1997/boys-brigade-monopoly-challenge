@@ -95,6 +95,11 @@ describe('planFromSetup', () => {
     assert.equal(plan.startTime, later);
   });
 
+  test('records whether the plan starts from the team\'s position', () => {
+    assert.equal(planFromSetup(setupWith()).plan.isFromPosition, false);
+    assert.equal(planFromSetup({ ...setupWith(), from: { lat: 51.4492, lng: -2.5813 } }).plan.isFromPosition, true);
+  });
+
   test('uses the current form values when re-planning', () => {
     const from = { lat: 51.4492, lng: -2.5813 };
     const { plan } = planFromSetup({ ...setupWith({ finishText: 'Finish 51.4556,-2.5894' }, { speedKmh: 3.5 }), from });
