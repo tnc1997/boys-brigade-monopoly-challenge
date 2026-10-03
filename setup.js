@@ -1,5 +1,6 @@
 import { parseLocation, parseLocations } from './locations.js';
 import { plan } from './planner.js';
+import { SPEED_RANGE } from './settings.js';
 
 /**
  * A plan together with the locations and times it was made from, so it can
@@ -12,9 +13,9 @@ import { plan } from './planner.js';
  *   startTime: number,
  *   deadline: number,
  *   settings: Pick<import('./storage.js').Settings, 'speedKmh' | 'detourFactor' | 'dwellSeconds' | 'safetyMarginSeconds'>,
- *   isFromPosition: boolean,
+ *   isFromPosition?: boolean,
  * }} SavedPlan
- * `isFromPosition` is whether the plan starts from the team's position (Re-plan from here) rather than the Start field.
+ * `isFromPosition` is whether the plan was made with Re-plan from here. Plans saved before it existed don't have it.
  */
 
 /**
@@ -107,7 +108,7 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
     return failure(`Finish: ${finish.error}`);
   }
 
-  const startTime = from || setup.startTimeText.trim() === '' ? now : timeToday(setup.startTimeText, now);
+  const startTime = from ? now : startTimeToday(setup.startTimeText, now);
   if (startTime === null) {
     return failure('Start time: Enter a time like 11:00, or leave it blank to start now.');
   }
@@ -118,8 +119,8 @@ export function planFromSetup({ setup, settings, now, doneKeys = [], from = null
   if (deadline <= startTime) {
     return failure('Deadline: The deadline must be after the start time.');
   }
-  if (!(settings.speedKmh > 0)) {
-    return failure('Walking speed: Enter a speed greater than 0 km/h.');
+  if (!(settings.speedKmh >= SPEED_RANGE.min && settings.speedKmh <= SPEED_RANGE.max)) {
+    return failure(`Walking speed: Enter a speed between ${SPEED_RANGE.min} and ${SPEED_RANGE.max} km/h.`);
   }
   if (!(settings.dwellSeconds >= 0)) {
     return failure('Selfie time: Enter a time of 0 minutes or more.');
@@ -183,4 +184,46 @@ export function searchesNeeded({ setup, searchResults = {}, isFromPosition = fal
     ...(setup.finishText.trim() === '' ? [] : [parseLocation(setup.finishText, { searchResults })]),
   ];
   return parsed.filter((result) => !result.isValid && result.query).map((result) => result.query);
+}
+
+/**
+ * Converts the Start time field to a moment today, with a blank field
+ * meaning now.
+ *
+ * @param {string} startTimeText The Start time field, as `HH:MM`, or an empty string to start now.
+ * @param {number} now The current time, in milliseconds since the Unix epoch.
+ * @returns {number | null} The start time in milliseconds since the Unix epoch, or `null` if the field isn't a valid time.
+ */
+export function startTimeToday(startTimeText, now) {
+  return startTimeText.trim() === '' ? now : timeToday(startTimeText, now);
+}
+
+/**
+ * Decides where to re-plan from after the settings change, from what's
+ * known now rather than from the old plan's times, which may be from
+ * another day. The team is on the move, so the route starts from their
+ * position and the current time, once a selfie has been ticked off, once
+ * they've re-planned from their position today, or between today's start
+ * time and deadline. Otherwise, such as before the start time or the
+ * evening before, the route starts at the Start field and start time.
+ *
+ * @param {object} options What's known now.
+ * @param {string} options.startTimeText The Start time field, as `HH:MM`, or an empty string to start now.
+ * @param {string} options.deadline The deadline, as `HH:MM`.
+ * @param {string[]} options.doneKeys Keys of the locations whose selfie has been taken.
+ * @param {boolean} options.isReplannedFromPositionToday Whether the current plan was made today with Re-plan from here.
+ * @param {number} options.now The current time, in milliseconds since the Unix epoch.
+ * @returns {'start' | 'position'} Where to re-plan from.
+ * @example
+ * replanStartingPoint({ startTimeText: '11:00', deadline: '16:00', doneKeys: [], isReplannedFromPositionToday: false, now: Date.parse('2026-10-03T09:00:00') }); // 'start'
+ * replanStartingPoint({ startTimeText: '11:00', deadline: '16:00', doneKeys: [], isReplannedFromPositionToday: false, now: Date.parse('2026-10-03T14:00:00') }); // 'position'
+ */
+export function replanStartingPoint({ startTimeText, deadline, doneKeys, isReplannedFromPositionToday, now }) {
+  if (doneKeys.length > 0 || isReplannedFromPositionToday) {
+    return 'position';
+  }
+  const startTime = startTimeToday(startTimeText, now);
+  const deadlineTime = timeToday(deadline, now);
+  const isDuringChallenge = startTime !== null && now >= startTime && (deadlineTime === null || now < deadlineTime);
+  return isDuringChallenge ? 'position' : 'start';
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { planFromSetup, searchesNeeded, timeToday } from '../setup.js';
+import { planFromSetup, replanStartingPoint, searchesNeeded, startTimeToday, timeToday } from '../setup.js';
 import { defaultState } from '../storage.js';
 
 const now = new Date(2026, 9, 3, 11, 0).getTime();
@@ -95,11 +95,6 @@ describe('planFromSetup', () => {
     assert.equal(plan.startTime, later);
   });
 
-  test('records whether the plan starts from the team\'s position', () => {
-    assert.equal(planFromSetup(setupWith()).plan.isFromPosition, false);
-    assert.equal(planFromSetup({ ...setupWith(), from: { lat: 51.4492, lng: -2.5813 } }).plan.isFromPosition, true);
-  });
-
   test('uses the current form values when re-planning', () => {
     const from = { lat: 51.4492, lng: -2.5813 };
     const { plan } = planFromSetup({ ...setupWith({ finishText: 'Finish 51.4556,-2.5894' }, { speedKmh: 3.5 }), from });
@@ -114,7 +109,9 @@ describe('planFromSetup', () => {
     ['the start time is invalid', { startTimeText: 'soon' }, {}, /^Start time: /],
     ['the deadline is invalid', {}, { deadline: '' }, /^Deadline: Enter a time/],
     ['the deadline is before the start time', { startTimeText: '16:30' }, {}, /^Deadline: The deadline must be after/],
-    ['the walking speed is not greater than 0', {}, { speedKmh: 0 }, /^Walking speed: /],
+    ['the walking speed is 0', {}, { speedKmh: 0 }, /^Walking speed: /],
+    ['the walking speed is below the slider range', {}, { speedKmh: 1.5 }, /^Walking speed: Enter a speed between 2 and 7 km\/h/],
+    ['the walking speed is above the slider range', {}, { speedKmh: 9 }, /^Walking speed: Enter a speed between 2 and 7 km\/h/],
     ['the selfie time is negative', {}, { dwellSeconds: -60 }, /^Selfie time: /],
   ];
   for (const [name, setup, settings, error] of failures) {
@@ -168,5 +165,55 @@ describe('searchesNeeded', () => {
   test('leaves out the start when re-planning from the team\'s position', () => {
     const setup = { ...defaultState().setup, locationsText: '', startText: 'Temple Meads' };
     assert.deepEqual(searchesNeeded({ setup, isFromPosition: true }), []);
+  });
+});
+
+describe('startTimeToday', () => {
+  test('uses now for a blank start time, and today otherwise', () => {
+    assert.equal(startTimeToday('', now), now);
+    assert.equal(startTimeToday(' 11:30 ', now), new Date(2026, 9, 3, 11, 30).getTime());
+    assert.equal(startTimeToday('soon', now), null);
+  });
+});
+
+describe('replanStartingPoint', () => {
+  const at = (day, hours, minutes) => new Date(2026, 9, day, hours, minutes).getTime();
+  const options = (overrides) => ({ startTimeText: '11:00', deadline: '16:00', doneKeys: [], isReplannedFromPositionToday: false, ...overrides });
+
+  test('re-plans from the Start field before the start time, when nothing is ticked off', () => {
+    assert.equal(replanStartingPoint(options({ now: at(3, 10, 30) })), 'start');
+  });
+
+  test("re-plans from the team's position between the start time and the deadline", () => {
+    assert.equal(replanStartingPoint(options({ now: at(3, 11, 0) })), 'position');
+    assert.equal(replanStartingPoint(options({ now: at(3, 14, 0) })), 'position');
+  });
+
+  test("re-plans from the Start field the evening before, after that day's deadline", () => {
+    assert.equal(replanStartingPoint(options({ now: at(2, 20, 0) })), 'start');
+  });
+
+  test('re-plans from the Start field the morning of the challenge', () => {
+    assert.equal(replanStartingPoint(options({ now: at(3, 9, 0) })), 'start');
+  });
+
+  test("re-plans from the team's position once a selfie is ticked off, even before the start time", () => {
+    assert.equal(replanStartingPoint(options({ doneKeys: ['51.449200,-2.581300'], now: at(3, 10, 50) })), 'position');
+  });
+
+  test("re-plans from the team's position after re-planning from there today, even before the start time", () => {
+    assert.equal(replanStartingPoint(options({ isReplannedFromPositionToday: true, now: at(3, 10, 45) })), 'position');
+  });
+
+  test('uses a start time that has just been put back', () => {
+    assert.equal(replanStartingPoint(options({ startTimeText: '12:00', now: at(3, 11, 30) })), 'start');
+  });
+
+  test("re-plans from the team's position with no start time before the deadline", () => {
+    assert.equal(replanStartingPoint(options({ startTimeText: '', now: at(3, 10, 0) })), 'position');
+  });
+
+  test('re-plans from the Start field with an invalid start time', () => {
+    assert.equal(replanStartingPoint(options({ startTimeText: 'soon', now: at(3, 10, 0) })), 'start');
   });
 });

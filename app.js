@@ -3,7 +3,7 @@ import { searchPlaces } from './search.js';
 import { parseLocations } from './locations.js';
 import { createMap, showPosition, showRoute } from './map.js';
 import { SPEED_PRESETS, SPEED_RANGE, settingsSummary, speedPreset } from './settings.js';
-import { planFromSetup, searchesNeeded, timeToday } from './setup.js';
+import { planFromSetup, replanStartingPoint, searchesNeeded, timeToday } from './setup.js';
 import { defaultState, loadState, resetChallenge, saveState } from './storage.js';
 
 /** The app's state, loaded from the previous visit if there was one. */
@@ -28,6 +28,7 @@ const settingsButton = /** @type {HTMLButtonElement} */ (document.getElementById
 const settingsDialog = /** @type {HTMLDialogElement} */ (document.getElementById('settings-dialog'));
 const speedPresets = /** @type {HTMLDivElement} */ (document.getElementById('speed-presets'));
 const speedSlider = /** @type {HTMLInputElement} */ (document.getElementById('settings-speed'));
+const speedField = /** @type {HTMLInputElement} */ (document.getElementById('speed'));
 const speedValue = /** @type {HTMLOutputElement} */ (document.getElementById('settings-speed-value'));
 const settingsSave = /** @type {HTMLButtonElement} */ (document.getElementById('settings-save'));
 const settingsSummaryText = /** @type {HTMLParagraphElement} */ (document.getElementById('settings-summary'));
@@ -47,6 +48,13 @@ let routeMap = null;
 
 /** Whether the map should zoom to fit the route the next time it's drawn, as after planning. */
 let shouldFitMap = true;
+
+/**
+ * Whether the walking speed has been changed in the settings panel since it
+ * opened. A speed outside the slider's range can't be shown on it, so the
+ * speed is only saved when it's changed there.
+ */
+let isSpeedChanged = false;
 
 /** The team's latest position from watching the location, or `null` if there isn't one yet. */
 let latestPosition = null;
@@ -419,10 +427,14 @@ async function lookUpAddresses(isFromPosition) {
     return state.searchResults;
   }
   showSearchStatus(`Looking up ${queries.length === 1 ? '1 address' : `${queries.length} addresses`}…`);
-  const results = await searchPlaces(queries, {
-    onProgress: (done, total) => showSearchStatus(`Looked up ${done} of ${total}…`),
-  });
-  showSearchStatus(null);
+  let results;
+  try {
+    results = await searchPlaces(queries, {
+      onProgress: (done, total) => showSearchStatus(`Looked up ${done} of ${total}…`),
+    });
+  } finally {
+    showSearchStatus(null);
+  }
   const saved = Object.fromEntries(Object.entries(results).filter(([, result]) => result.isFound || !result.isTemporary));
   state.searchResults = { ...state.searchResults, ...saved };
   saveState(state);
@@ -462,8 +474,8 @@ async function planRoute(from) {
 
 /** Messages for each way getting the position can fail, by `GeolocationPositionError.code`. */
 const GEOLOCATION_ERRORS = {
-  1: 'Location access is blocked. Allow location for this site in your browser settings, or update the Start field and press Plan route.',
-  2: "Your location isn't available right now. Try again in a moment, or update the Start field and press Plan route.",
+  1: 'Location access is blocked. Allow location for this site in your browser settings, or set Start to where you are, clear Start time and press Plan route.',
+  2: "Your location isn't available right now. Try again in a moment, or set Start to where you are, clear Start time and press Plan route.",
   3: 'Getting your location took too long. Try again, ideally with a clear view of the sky.',
 };
 
@@ -484,26 +496,39 @@ function showReplanStatus(message, isError) {
  *
  * @param {import('./planner.js').LatLng} position The team's position.
  */
-async function replanFrom(position) {
-  const error = await planRoute(position);
-  showReplanStatus(error ?? `Re-planned from your position at ${timeFormat.format(Date.now())}.`, error !== null);
+/** The message after re-planning from the team's position. */
+const replannedFromPosition = () => `Re-planned from your position at ${timeFormat.format(Date.now())}.`;
+
+/**
+ * Re-plans and shows how it went under Re-plan from here, next to the route.
+ *
+ * @param {import('./planner.js').LatLng | null} position The team's position, or `null` to plan from the Start field.
+ * @param {() => string} successMessage Makes the message to show when a plan is made.
+ */
+async function replanAndReport(position, successMessage) {
+  try {
+    const error = await planRoute(position);
+    showReplanStatus(error ?? successMessage(), error !== null);
+  } catch {
+    showReplanStatus("Re-planning didn't work. Try again.", true);
+  }
 }
 
 /** Re-plans from the team's current position and the current time, as Re-plan from here does. */
 function requestReplan() {
   // Use the watched position if it's recent, rather than waiting for a new one.
   if (latestPosition && Date.now() - latestPosition.time <= POSITION_MAX_AGE_MS) {
-    replanFrom({ lat: latestPosition.lat, lng: latestPosition.lng });
+    replanAndReport({ lat: latestPosition.lat, lng: latestPosition.lng }, replannedFromPosition);
     return;
   }
   if (!('geolocation' in navigator)) {
-    showReplanStatus("This browser can't share your location. Update the Start field and press Plan route instead.", true);
+    showReplanStatus("This browser can't share your location. Set Start to where you are, clear Start time and press Plan route instead.", true);
     return;
   }
   replanButton.disabled = true;
   showReplanStatus('Getting your location…', false);
   navigator.geolocation.getCurrentPosition(
-    (position) => replanFrom({ lat: position.coords.latitude, lng: position.coords.longitude }),
+    (position) => replanAndReport({ lat: position.coords.latitude, lng: position.coords.longitude }, replannedFromPosition),
     (error) => {
       replanButton.disabled = false;
       showReplanStatus(GEOLOCATION_ERRORS[error.code] ?? "Your location couldn't be found. Try again.", true);
@@ -667,8 +692,8 @@ function showSettingsSpeed(speedKmh) {
   }
 }
 
-// The setup form's speed field uses the slider's range too.
-for (const input of [speedSlider, document.getElementById('speed')]) {
+// The setup form's speed field uses the slider's range too, which planning checks.
+for (const input of [speedSlider, speedField]) {
   input.min = String(SPEED_RANGE.min);
   input.max = String(SPEED_RANGE.max);
 }
@@ -695,20 +720,19 @@ speedSlider.addEventListener('input', () => {
   showSettingsSpeed(Number(speedSlider.value));
 });
 
-/**
- * Whether the walking speed has been changed in the settings panel since it
- * opened. A speed outside the slider's range can't be shown on it, so the
- * speed is only saved when it's changed here.
- */
-let isSpeedChanged = false;
-
 settingsButton.addEventListener('click', () => {
-  isSpeedChanged = false;
+  // A speed saved outside the slider's range (by an older version) can't be
+  // planned with, so treat the slider's in-range value as a change to save.
+  // An empty speed (NaN) is treated the same way, so Save stores the speed shown.
+  const { speedKmh } = state.settings;
+  isSpeedChanged = !Number.isFinite(speedKmh) || speedKmh < SPEED_RANGE.min || speedKmh > SPEED_RANGE.max;
   // Escape and the back button close the panel without changing
   // returnValue, so clear it to stop an earlier Save applying again.
   settingsDialog.returnValue = '';
-  // The setup form's speed field can be empty, which saves NaN.
-  showSettingsSpeed(Number.isFinite(state.settings.speedKmh) ? state.settings.speedKmh : defaultState().settings.speedKmh);
+  // The setup form's speed field can be empty, which saves NaN, and an old
+  // speed can be out of range, so show the speed that Save would store.
+  const shownSpeed = Number.isFinite(speedKmh) ? speedKmh : defaultState().settings.speedKmh;
+  showSettingsSpeed(Math.min(SPEED_RANGE.max, Math.max(SPEED_RANGE.min, shownSpeed)));
   for (const field of panelFields) {
     if (field.dataset.panelSetup) {
       field.value = state.setup[field.dataset.panelSetup];
@@ -747,13 +771,23 @@ settingsDialog.addEventListener('close', () => {
   fillForm();
   showSettingsSummary();
   showCountdown();
-  // Re-plan with the new settings, keeping ticks, the same way the current
-  // route was planned: from the team's position, or from the Start field.
+  // Re-plan with the new settings, keeping ticks: from the Start field if
+  // the team hasn't set off yet, otherwise from their position and now.
   if (state.plan?.settings) {
-    if (state.plan.isFromPosition) {
+    const now = Date.now();
+    // A plan's times are on the day it was made, so only today's counts.
+    const isPlanForToday = new Date(state.plan.deadline).toDateString() === new Date(now).toDateString();
+    const startingPoint = replanStartingPoint({
+      startTimeText: state.setup.startTimeText,
+      deadline: state.settings.deadline,
+      doneKeys: state.doneKeys,
+      isReplannedFromPositionToday: Boolean(state.plan.isFromPosition) && isPlanForToday,
+      now,
+    });
+    if (startingPoint === 'position') {
       requestReplan();
     } else {
-      planRoute(null);
+      replanAndReport(null, () => 'Re-planned from the Start field with the new settings.');
     }
   }
 });
