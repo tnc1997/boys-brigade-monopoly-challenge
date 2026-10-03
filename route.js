@@ -23,6 +23,20 @@ import { walkSeconds } from './planner.js';
  */
 
 /**
+ * Writes coordinates for a maps URL, to 6 decimal places (about 10 cm), so
+ * a value very close to zero isn't written in exponent notation like
+ * `-5e-7`, which maps apps can't read.
+ *
+ * @param {import('./planner.js').LatLng} location The location.
+ * @returns {string} The coordinates as `lat,lng`, like `51.454500,-2.587900`.
+ */
+function coordinatesText({ lat, lng }) {
+  // Rounding first also turns -0.000000 into 0.000000.
+  const format = (value) => Number(value.toFixed(6)).toFixed(6);
+  return `${format(lat)},${format(lng)}`;
+}
+
+/**
  * Creates a Google Maps URL with walking directions from the current
  * position to a location.
  *
@@ -30,10 +44,10 @@ import { walkSeconds } from './planner.js';
  * @returns {string} The URL.
  * @example
  * googleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 });
- * // 'https://www.google.com/maps/dir/?api=1&destination=51.4545%2C-2.5879&travelmode=walking'
+ * // 'https://www.google.com/maps/dir/?api=1&destination=51.454500%2C-2.587900&travelmode=walking'
  */
 export function googleMapsDirectionsUrl({ lat, lng }) {
-  const params = new URLSearchParams({ api: '1', destination: `${lat},${lng}`, travelmode: 'walking' });
+  const params = new URLSearchParams({ api: '1', destination: coordinatesText({ lat, lng }), travelmode: 'walking' });
   return `https://www.google.com/maps/dir/?${params}`;
 }
 
@@ -46,10 +60,10 @@ export function googleMapsDirectionsUrl({ lat, lng }) {
  * @returns {string} The URL.
  * @example
  * appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 });
- * // 'https://maps.apple.com/?daddr=51.4545,-2.5879&dirflg=w'
+ * // 'https://maps.apple.com/?daddr=51.454500,-2.587900&dirflg=w'
  */
 export function appleMapsDirectionsUrl({ lat, lng }) {
-  return `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=w`;
+  return `https://maps.apple.com/?daddr=${coordinatesText({ lat, lng })}&dirflg=w`;
 }
 
 /**

@@ -21,14 +21,23 @@ describe('googleMapsDirectionsUrl', () => {
     const url = new URL(googleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }));
     assert.equal(url.origin + url.pathname, 'https://www.google.com/maps/dir/');
     assert.equal(url.searchParams.get('api'), '1');
-    assert.equal(url.searchParams.get('destination'), '51.4545,-2.5879');
+    assert.equal(url.searchParams.get('destination'), '51.454500,-2.587900');
     assert.equal(url.searchParams.get('travelmode'), 'walking');
   });
 });
 
 describe('appleMapsDirectionsUrl', () => {
   test('opens walking directions from the current position to the location', () => {
-    assert.equal(appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }), 'https://maps.apple.com/?daddr=51.4545,-2.5879&dirflg=w');
+    assert.equal(appleMapsDirectionsUrl({ lat: 51.4545, lng: -2.5879 }), 'https://maps.apple.com/?daddr=51.454500,-2.587900&dirflg=w');
+  });
+});
+
+describe('directions URLs near zero', () => {
+  test("never write coordinates in exponent notation, which maps apps can't read", () => {
+    const location = { lat: 51.5, lng: -5e-7 };
+    assert.equal(new URL(googleMapsDirectionsUrl(location)).searchParams.get('destination'), '51.500000,0.000000');
+    assert.equal(appleMapsDirectionsUrl(location), 'https://maps.apple.com/?daddr=51.500000,0.000000&dirflg=w');
+    assert.equal(new URL(googleMapsDirectionsUrl({ lat: 51.5, lng: 0.0000012 })).searchParams.get('destination'), '51.500000,0.000001');
   });
 });
 
