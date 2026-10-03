@@ -36,6 +36,33 @@ describe('service worker', () => {
 
   test("doesn't save map tiles, which the tile usage policy doesn't allow offline", () => {
     assert.doesNotMatch(sw, /tile\.openstreetmap\.org\/\{|cache\.put\([^)]*tile/);
-    assert.match(sw, /url\.origin !== self\.location\.origin/);
+    // Tiles aren't app files, so they're passed straight to the network.
+    assert.match(sw, /if \(!APP_FILE_URLS\.has\(key\)\) \{\s*return;/);
+  });
+});
+
+describe('service worker saving', () => {
+  test('only saves successful responses', () => {
+    assert.match(sw, /async function saveResponse\(key, response\) \{\s*if \(response\.ok\)/);
+  });
+
+  test("doesn't let a failure to save Leaflet fail the install", () => {
+    const saveLibraryFile = sw.slice(sw.indexOf('async function saveLibraryFile'), sw.indexOf("self.addEventListener('install'"));
+    assert.match(saveLibraryFile, /try \{[\s\S]*\} catch \{/);
+  });
+
+  test('reuses a saved copy of Leaflet before downloading it, and tries again when activating', () => {
+    assert.match(sw, /const existing = await caches\.match\(url\);/);
+    const activate = sw.slice(sw.indexOf("self.addEventListener('activate'"), sw.indexOf("self.addEventListener('fetch'"));
+    assert.ok(activate.indexOf('saveLibraryFile') < activate.indexOf('caches.delete'), 'Leaflet is saved before old caches are deleted');
+  });
+
+  test("only handles the app's own files, saved without query strings", () => {
+    assert.match(sw, /if \(!APP_FILE_URLS\.has\(key\)\) \{\s*return;/);
+    assert.match(sw, /const key = `\$\{url\.origin\}\$\{url\.pathname\}`;/);
+  });
+
+  test("installs fresh copies, bypassing the browser's HTTP cache", () => {
+    assert.match(sw, /new Request\(file, \{ cache: 'reload' \}\)/);
   });
 });

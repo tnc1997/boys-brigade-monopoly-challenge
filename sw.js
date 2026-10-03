@@ -1,9 +1,10 @@
 /*
  * Service worker that keeps the app working without signal.
  *
- * The app's own files and Leaflet are saved when the service worker
- * installs. The app's files are then fetched from the network first, so a
- * new deploy is picked up whenever there's signal, with the saved copy used
+ * The app's own files are saved when the service worker installs, and
+ * Leaflet when it installs or activates, or else the first time the page
+ * loads it. The app's files are then fetched from the network first, so a new
+ * deploy is picked up whenever there's signal, with the saved copy used
  * offline. Leaflet is versioned, so the saved copy is used first.
  *
  * Map tiles and address searches are left alone. OpenStreetMap's tile usage
@@ -39,37 +40,67 @@ const LIBRARY_FILES = [
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
 ];
 
+/** The app's files as absolute URLs without query strings, which are the keys they're saved under. */
+const APP_FILE_URLS = new Set(APP_FILES.map((file) => new URL(file, self.location.href).href));
+
 /**
- * Saves a library file if it loads successfully. Failing to load it doesn't
- * throw, so the app's own files can still be saved; it's saved later, the
- * first time the page loads it.
+ * Saves a successful response in the cache. Failed responses aren't saved.
  *
- * @param {Cache} cache The cache to save it in.
+ * @param {string} key The URL to save it under.
+ * @param {Response} response The response, which is used up, so pass a clone if it's needed elsewhere.
+ * @returns {Promise<void>} Resolves once it's saved, or straight away if it isn't.
+ */
+async function saveResponse(key, response) {
+  if (response.ok) {
+    await (await caches.open(CACHE_NAME)).put(key, response);
+  }
+}
+
+/**
+ * Makes sure a library file is saved in the current cache. It reuses a
+ * copy from any cache, including the one from before a deploy, and only
+ * downloads it if there isn't one. A failure doesn't throw, so the app's own
+ * files can still be saved; it's tried again later.
+ *
  * @param {string} url The library file's URL.
  * @returns {Promise<void>} Resolves once it's saved, or once saving it has failed.
  */
-function saveLibraryFile(cache, url) {
-  // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
-  return fetch(url, { mode: 'cors' })
-    .then((response) => (response.ok ? cache.put(url, response) : undefined))
-    .catch(() => {});
+async function saveLibraryFile(url) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    if (await cache.match(url)) {
+      return;
+    }
+    const existing = await caches.match(url);
+    // Leaflet is loaded with crossorigin="anonymous", so save it with a matching CORS request.
+    await saveResponse(url, existing ?? (await fetch(url, { mode: 'cors' })));
+  } catch {
+    // Tried again when the service worker activates, and when the page loads it.
+  }
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => Promise.all([cache.addAll(APP_FILES), ...LIBRARY_FILES.map((url) => saveLibraryFile(cache, url))]))
-      .then(() => self.skipWaiting()),
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      // Bypass the browser's HTTP cache, so the files match this deploy.
+      await cache.addAll(APP_FILES.map((file) => new Request(file, { cache: 'reload' })));
+      await Promise.all(LIBRARY_FILES.map(saveLibraryFile));
+      await self.skipWaiting();
+    })(),
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((names) => Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))))
-      .then(() => self.clients.claim()),
+    (async () => {
+      // Try any library file that couldn't be saved at install, before the
+      // old caches (which may still have a copy) are deleted.
+      await Promise.all(LIBRARY_FILES.map(saveLibraryFile));
+      const names = await caches.keys();
+      await Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)));
+      await self.clients.claim();
+    })(),
   );
 });
 
@@ -81,42 +112,42 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   if (LIBRARY_FILES.includes(url.href)) {
-    // Use the saved copy, or load it and save it if it wasn't saved at install.
-    const saved = caches.match(url.href);
-    const response = saved.then((match) => match ?? fetch(request));
-    event.respondWith(response.then((match) => match.clone()));
-    event.waitUntil(
-      Promise.all([saved, response])
-        .then(([match, loaded]) => (!match && loaded.ok ? caches.open(CACHE_NAME).then((cache) => cache.put(url.href, loaded)) : undefined))
-        .catch(() => {}),
+    // Use the saved copy, or load it and save a copy if it wasn't saved yet.
+    event.respondWith(
+      caches.match(url.href).then(
+        (saved) =>
+          saved ??
+          fetch(request).then((loaded) => {
+            event.waitUntil(saveResponse(url.href, loaded.clone()).catch(() => {}));
+            return loaded;
+          }),
+      ),
     );
     return;
   }
 
-  // Only the app's own files are handled; tiles and searches go to the network as usual.
-  if (url.origin !== self.location.origin) {
+  // Only the app's own files are handled; tiles, searches and anything else
+  // go to the network as usual.
+  const key = `${url.origin}${url.pathname}`;
+  if (!APP_FILE_URLS.has(key)) {
     return;
   }
-  const network = fetch(request);
-  // Refresh the saved copy, keeping the service worker alive until it's
-  // written. The copy is taken before the response is used below.
-  const refresh = network.then((response) => {
-    if (!response.ok) {
-      return undefined;
-    }
-    const copy = response.clone();
-    return caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  // Take a copy as soon as the response arrives, before anything reads it,
+  // to refresh the saved copy. The service worker is kept alive until it's
+  // written, even if the saved copy is used first on a weak signal.
+  let copy;
+  const network = fetch(request).then((loaded) => {
+    copy = loaded.clone();
+    return loaded;
   });
+  event.waitUntil(network.then(() => saveResponse(key, copy)).catch(() => {}));
   // Without a saved copy, opening the page falls back to the saved page;
   // anything else fails as it would without the service worker.
   const saved = () =>
-    caches
-      .match(request, { ignoreSearch: true })
-      .then((match) => match ?? (request.mode === 'navigate' ? caches.match('index.html') : undefined));
+    caches.match(key).then((match) => match ?? (request.mode === 'navigate' ? caches.match(new URL('index.html', self.location.href).href) : undefined));
   // With a weak signal the network can hang, so use the saved copy after a
   // few seconds. The network request carries on and still refreshes it.
   const timeout = new Promise((resolve) => setTimeout(resolve, NETWORK_TIMEOUT_MS)).then(saved);
-  event.waitUntil(refresh.catch(() => {}));
   event.respondWith(
     Promise.race([network, timeout.then((match) => match ?? network)])
       .catch(saved)
