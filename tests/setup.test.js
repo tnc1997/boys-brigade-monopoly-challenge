@@ -140,16 +140,26 @@ describe('planFromSetup with addresses and place names', () => {
     assert.deepEqual(invalidLines, []);
     assert.equal(plan.points.length, 2);
     assert.equal(plan.finish.lat, 51.4492);
-    assert.deepEqual(matches, [
-      { kind: 'line', source: 'Line 2', label: 'Queen Square, Bristol', matchedName: 'Queen Square, City Centre, Bristol' },
-      { kind: 'finish', source: 'Finish', label: 'Temple Meads', matchedName: 'Bristol Temple Meads' },
-    ]);
+    // Lines show their own matches, so only the Finish is returned here.
+    assert.deepEqual(matches, [{ source: 'Finish', label: 'Temple Meads', matchedName: 'Bristol Temple Meads' }]);
+  });
+
+  test('returns a Start or Finish whose label starts with "Line"', () => {
+    const results = { 'line one road': { isFound: true, lat: 51.4492, lng: -2.5813, name: 'Temple Meads, Bristol' } };
+    const { matches } = planFromSetup({ ...setupWith({ finishText: 'Line One Road' }), searchResults: results });
+    assert.deepEqual(matches, [{ source: 'Finish', label: 'Line One Road', matchedName: 'Temple Meads, Bristol' }]);
+  });
+
+  test('returns the Start and Finish matches even when no location line is usable', () => {
+    const { plan, matches } = planFromSetup({ ...setupWith({ locationsText: 'Nowhere', startText: 'Queen Square, Bristol', finishText: 'Temple Meads' }), searchResults });
+    assert.equal(plan, null);
+    assert.deepEqual(matches.map(({ source }) => source), ['Start', 'Finish']);
   });
 
   test('looks up the start too', () => {
     const { plan, matches } = planFromSetup({ ...setupWith({ startText: 'Queen Square, Bristol' }), searchResults });
     assert.equal(plan.start.lat, 51.4504);
-    assert.deepEqual(matches.map(({ kind, source }) => [kind, source]), [['start', 'Start']]);
+    assert.deepEqual(matches.map(({ source }) => source), ['Start']);
   });
 });
 
