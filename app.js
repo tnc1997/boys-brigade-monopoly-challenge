@@ -212,7 +212,7 @@ function previewLines() {
   // Only redraw the map when the locations not in the route yet change, or
   // are renamed, so typing doesn't keep rebuilding it or closing an open
   // popup.
-  if (newLocationsText(lines) !== drawnNewLocations) {
+  if (newLocationsText(newLocationMarkers(lines, currentPlan())) !== drawnNewLocations) {
     updateMap(lines);
   }
 }
@@ -221,13 +221,20 @@ function previewLines() {
  * Lists the locations not in the route yet, with their names, to tell
  * whether the map needs redrawing.
  *
- * @param {import('./locations.js').ParsedLocationLine[]} lines The lines of the location list.
+ * @param {import('./map.js').MapMarker[]} markers Their markers, from {@link newLocationMarkers}.
  * @returns {string} Each location's key and marker title, one per line.
  */
-function newLocationsText(lines) {
-  return newLocationMarkers(lines, state.plan?.settings ? state.plan : null)
-    .map(({ location, title }) => `${location.key} ${title}`)
-    .join('\n');
+function newLocationsText(markers) {
+  return markers.map(({ location, title }) => `${location.key} ${title}`).join('\n');
+}
+
+/**
+ * The current plan, if there is a usable one.
+ *
+ * @returns {import('./setup.js').SavedPlan | null} The plan, or `null` if there isn't one or it was saved by an older version without settings.
+ */
+function currentPlan() {
+  return state.plan?.settings ? state.plan : null;
 }
 
 /**
@@ -721,10 +728,11 @@ function updateMap(lines = parseLocations(state.setup.locationsText, { searchRes
   if (!routeMap || mapContainer.closest('[hidden]')) {
     return;
   }
-  const plan = state.plan?.settings ? state.plan : null;
+  const plan = currentPlan();
   const route = plan ? mapRoute(plan, state.doneKeys, (time) => timeFormat.format(time)) : { path: [], markers: [] };
-  route.markers.push(...newLocationMarkers(lines, plan));
-  drawnNewLocations = newLocationsText(lines);
+  const newMarkers = newLocationMarkers(lines, plan);
+  route.markers.push(...newMarkers);
+  drawnNewLocations = newLocationsText(newMarkers);
   showRoute(routeMap, route, shouldFitMap);
   shouldFitMap = false;
 }
